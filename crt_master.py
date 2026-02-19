@@ -1,12 +1,56 @@
-import os
+﻿import os
 import subprocess
 import sys
 
 from default_restore import restore_defaults_from_backup
 from launchbox_session_mode import apply_crt_session_mode, restore_session_mode
 
-LAUNCHBOX_EXE = r"D:\LaunchBox\LaunchBox.exe"
-LAUNCHBOX_DIR = r"D:\LaunchBox"
+LAUNCHBOX_EXE = r"D:\Emulators\LaunchBox\LaunchBox.exe"
+LAUNCHBOX_DIR = r"D:\Emulators\LaunchBox"
+
+
+def stop_plex_lockers() -> None:
+    cmd = (
+        "Get-CimInstance Win32_Process | "
+        "Where-Object { $_.Name -like 'python*' -and $_.CommandLine -match 'launch_plex\\.py' } | "
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
+    )
+    subprocess.run(
+        ["powershell", "-NoProfile", "-Command", cmd],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def force_restore_plex() -> None:
+    subprocess.run(
+        [sys.executable, "launch_plex.py", "--restore-only"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def run_plex_mode() -> None:
+    # Clean up any stale locker process before starting a fresh session.
+    stop_plex_lockers()
+
+    plex_proc = subprocess.Popen([sys.executable, "launch_plex.py"])
+    try:
+        plex_proc.wait()
+    except KeyboardInterrupt:
+        print("\nStopping Plex locker and restoring to main screen...")
+    finally:
+        if plex_proc.poll() is None:
+            plex_proc.terminate()
+            try:
+                plex_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                plex_proc.kill()
+        stop_plex_lockers()
+        force_restore_plex()
+
 
 def main():
     while True:
@@ -20,7 +64,7 @@ def main():
         print(" 4. [TOOLS]  Restore Default Settings")
         print(" 5. [EXIT]   Close Menu")
         print("========================================")
-        
+
         try:
             choice = input("\nSelect an option (1-5): ")
             if choice == '1':
@@ -51,7 +95,7 @@ def main():
                         print(restore_msg)
                         input("Press Enter to continue...")
             elif choice == '3':
-                subprocess.run([sys.executable, "launch_plex.py"])
+                run_plex_mode()
             elif choice == '4':
                 ok, msg, restored = restore_defaults_from_backup()
                 print(msg)
@@ -63,8 +107,10 @@ def main():
             elif choice == '5':
                 break
         except KeyboardInterrupt:
-            print("\nExiting...")
-            break
+            print("\nInterrupted. Returning to menu...")
+            stop_plex_lockers()
+            force_restore_plex()
+
 
 if __name__ == "__main__":
     main()
