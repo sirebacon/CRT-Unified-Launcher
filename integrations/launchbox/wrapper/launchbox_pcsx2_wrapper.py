@@ -13,6 +13,7 @@ import win32process
 Rect = Tuple[int, int, int, int]
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "crt_config.json")
+STOP_ENFORCE_FLAG = os.path.join(PROJECT_ROOT, "wrapper_stop_enforce.flag")
 
 
 def load_config() -> dict:
@@ -39,11 +40,12 @@ def resolve_pcsx2_exe(cfg: dict) -> Tuple[str, str]:
 def target_rect(cfg: dict) -> Tuple[int, int, int, int]:
     li = cfg.get("launcher_integration", {})
     r = cfg.get("retroarch", {})
+    p = cfg.get("pcsx2", {})
     return (
-        int(li.get("x", r.get("x", -1211))),
-        int(li.get("y", r.get("y", 43))),
-        int(li.get("w", r.get("w", 1057))),
-        int(li.get("h", r.get("h", 835))),
+        int(p.get("x", li.get("x", r.get("x", -1211)))),
+        int(p.get("y", li.get("y", r.get("y", 43)))),
+        int(p.get("w", li.get("w", r.get("w", 1057)))),
+        int(p.get("h", li.get("h", r.get("h", 835)))),
     )
 
 
@@ -96,32 +98,44 @@ def main() -> int:
     cfg = load_config()
     exe, cwd = resolve_pcsx2_exe(cfg)
     x, y, w, h = target_rect(cfg)
+    primary = cfg.get("launcher_integration", {}).get(
+        "primary_on_exit", {"x": 100, "y": 100, "w": 1280, "h": 720}
+    )
+    px, py, pw, ph = (
+        int(primary.get("x", 100)),
+        int(primary.get("y", 100)),
+        int(primary.get("w", 1280)),
+        int(primary.get("h", 720)),
+    )
 
     args = [exe, *sys.argv[1:]]
     proc = subprocess.Popen(args, cwd=cwd)
 
     start = time.time()
     pulsed = False
-    max_lock_seconds = 12.0
-    settle_seconds = 2.0
+    # PCSX2 can rebuild/reposition its window multiple times while content loads.
+    # Keep startup lock active longer so it cannot drift back to primary mid-load.
+    max_lock_seconds = 120.0
     lock_active = True
-    last_not_target = time.time()
 
     while proc.poll() is None:
         elapsed = time.time() - start
+        if os.path.exists(STOP_ENFORCE_FLAG):
+            lock_active = False
         if lock_active and elapsed <= max_lock_seconds:
             hwnd = find_window_for_pid(proc.pid)
             if hwnd:
                 try:
                     l, t, cw, ch = get_rect(hwnd)
+                    # If watcher moved PCSX2 back to primary on Ctrl+C, stop enforcing CRT.
+                    if (l, t, cw, ch) == (px, py, pw, ph):
+                        lock_active = False
+                        continue
                     if (l, t, cw, ch) != (x, y, w, h):
-                        last_not_target = time.time()
                         pulse = (not pulsed) and (elapsed < 8.0)
                         move_window(hwnd, x, y, w, h, pulse)
                         if pulse:
                             pulsed = True
-                    elif (time.time() - last_not_target) >= settle_seconds:
-                        lock_active = False
                 except Exception:
                     pass
         time.sleep(0.1 if elapsed < 8.0 else 0.4)

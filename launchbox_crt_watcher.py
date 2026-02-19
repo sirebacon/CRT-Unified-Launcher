@@ -1,5 +1,6 @@
 import ctypes
 import json
+import os
 import sys
 import time
 from typing import Dict, List, Optional, Set, Tuple
@@ -11,6 +12,7 @@ import win32process
 
 
 Rect = Tuple[int, int, int, int]
+STOP_ENFORCE_FLAG = os.path.join(os.path.dirname(__file__), "wrapper_stop_enforce.flag")
 
 
 def set_dpi_aware() -> None:
@@ -277,9 +279,33 @@ def find_retroarch_hwnds_by_pid() -> List[int]:
     return hwnds
 
 
+def find_hwnds_by_process_names(names: Set[str]) -> List[int]:
+    hwnds: List[int] = []
+    seen: Set[int] = set()
+    for proc in psutil.process_iter(["pid", "name"]):
+        try:
+            name = (proc.info.get("name") or "").lower()
+            if name not in names:
+                continue
+            for hwnd in windows_for_pid(int(proc.info["pid"])):
+                if hwnd not in seen:
+                    seen.add(hwnd)
+                    hwnds.append(hwnd)
+        except Exception:
+            continue
+    return hwnds
+
+
 def main() -> None:
     set_dpi_aware()
     target, cfg = load_config()
+
+    # Clear stale stop flag from any previous session.
+    try:
+        if os.path.exists(STOP_ENFORCE_FLAG):
+            os.remove(STOP_ENFORCE_FLAG)
+    except Exception:
+        pass
 
     if not cfg["enabled"]:
         print("launcher_integration is disabled in crt_config.json")
@@ -323,11 +349,39 @@ def main() -> None:
         if cfg.get("keep_cursor_visible", True):
             force_cursor_visible()
 
-        # Also return any active RetroArch windows to primary.
+        # Tell wrapper-managed emulators to stop CRT enforcement immediately.
+        try:
+            with open(STOP_ENFORCE_FLAG, "w", encoding="utf-8") as f:
+                f.write(str(time.time()))
+        except Exception:
+            pass
+
+        # Also return any wrapper-managed emulator windows to primary.
         retro_hwnds = find_retroarch_hwnds_by_pid()
         if not retro_hwnds:
             retro_hwnds = find_retroarch_hwnds()
+        extra_hwnds = find_hwnds_by_process_names(
+            {
+                "ppssppwindows64.exe",
+                "ppssppwindows.exe",
+                "dolphin.exe",
+                "pcsx2-qt.exe",
+                "pcsx2.exe",
+            }
+        )
         for hwnd in retro_hwnds:
+            try:
+                if win32gui.IsWindow(hwnd):
+                    move_window(
+                        hwnd,
+                        int(primary["x"]),
+                        int(primary["y"]),
+                        int(primary["w"]),
+                        int(primary["h"]),
+                    )
+            except Exception:
+                continue
+        for hwnd in extra_hwnds:
             try:
                 if win32gui.IsWindow(hwnd):
                     move_window(
