@@ -5,7 +5,8 @@
     "w": 1057,
     "h": 835,
     "path": "D:\\RetroArch-Win64\\retroarch.exe",
-    "dir": "D:\\RetroArch-Win64"
+    "dir": "D:\\RetroArch-Win64",
+    "launchbox_config": "D:\\RetroArch-Win64\\retroarch_crt.cfg"
   },
   "plex": {
     "x": -1883,
@@ -14,5 +15,43 @@
     "h": 1184,
     "path": "C:\\Program Files\\Plex\\Plex\\Plex.exe",
     "dir": "C:\\Program Files\\Plex\\Plex"
+  },
+  "launcher_integration": {
+    "enabled": true,
+    "main_monitor_index": 1,
+    "keep_cursor_visible": true,
+    "debug_retroarch": false,
+    "x": -1211,
+    "y": 43,
+    "w": 1057,
+    "h": 835,
+    "poll_seconds": 0.5,
+    "target_processes": [
+      "retroarch.exe",
+      "dolphin.exe",
+      "ppssppwindows64.exe",
+      "ppssppwindows.exe"
+    ],
+    "target_parent_processes": [
+      "steam.exe",
+      "galaxyclient.exe",
+      "goggalaxy.exe"
+    ],
+    "ignore_processes": [
+      "launchbox.exe",
+      "bigbox.exe",
+      "explorer.exe",
+      "dwm.exe",
+      "applicationframehost.exe",
+      "startmenuexperiencehost.exe",
+      "searchhost.exe"
+    ],
+    "primary_on_exit": {
+      "x": 100,
+      "y": 100,
+      "w": 1280,
+      "h": 720
+    }
   }
 }
+

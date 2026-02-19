@@ -10,6 +10,7 @@ The project keeps app windows snapped to calibrated CRT bounds, and returns them
 - Per-app launchers:
 - `launch_ra.py` for RetroArch
 - `launch_plex.py` for Plex
+- `launchbox_crt_watcher.py` for LaunchBox/BigBox game launches
 - Shared JSON config (`crt_config.json`) for paths and target window geometry
 - Utility tools in `tools/` for calibration, inspection, and older standalone workflows
 
@@ -24,11 +25,12 @@ The project keeps app windows snapped to calibrated CRT bounds, and returns them
 - `pywin32`
 - `keyboard` (for live calibration script)
 - `pygetwindow` (for inspector script)
+- `psutil` (for LaunchBox/BigBox watcher process detection)
 
 Install dependencies:
 
 ```powershell
-pip install pywin32 keyboard pygetwindow
+pip install pywin32 keyboard pygetwindow psutil
 ```
 
 ## Project Structure
@@ -36,6 +38,7 @@ pip install pywin32 keyboard pygetwindow
 - `crt_master.py`: main text menu that launches `launch_ra.py` or `launch_plex.py`
 - `launch_ra.py`: launches/locks RetroArch window using `crt_config.json`
 - `launch_plex.py`: launches/locks Plex window using `crt_config.json` and removes borders while locked
+- `launchbox_crt_watcher.py`: keeps LaunchBox/BigBox on primary while moving matching game windows to CRT
 - `crt_config.json`: shared coordinates + executable paths
 - `tools/retro.py`: older standalone RetroArch locker with hardcoded values
 - `tools/plex.py`: older standalone Plex locker + INI sync with hardcoded values
@@ -64,6 +67,35 @@ Edit `crt_config.json`:
     "h": 1184,
     "path": "C:\\Program Files\\Plex\\Plex\\Plex.exe",
     "dir": "C:\\Program Files\\Plex\\Plex"
+  },
+  "launcher_integration": {
+    "enabled": true,
+    "x": -1211,
+    "y": 43,
+    "w": 1057,
+    "h": 835,
+    "poll_seconds": 0.5,
+    "target_processes": [
+      "retroarch.exe",
+      "dolphin.exe",
+      "ppssppwindows64.exe",
+      "ppssppwindows.exe"
+    ],
+    "target_parent_processes": [
+      "steam.exe",
+      "galaxyclient.exe",
+      "goggalaxy.exe"
+    ],
+    "ignore_processes": [
+      "launchbox.exe",
+      "bigbox.exe"
+    ],
+    "primary_on_exit": {
+      "x": 100,
+      "y": 100,
+      "w": 1280,
+      "h": 720
+    }
   }
 }
 ```
@@ -72,6 +104,7 @@ Notes:
 - Negative `x`/`y` values are expected when the CRT is positioned left/up of the primary monitor in Windows display layout.
 - `path` must point to the executable.
 - `dir` should be the executable working directory.
+- For Steam/GOG titles, add known game executable names to `launcher_integration.target_processes` if parent-process detection misses a title.
 
 ## Usage
 
@@ -91,10 +124,31 @@ Or run directly:
 ```powershell
 python launch_ra.py
 python launch_plex.py
+python launchbox_crt_watcher.py
 ```
 
 While active, each launcher re-checks the app window every second and snaps it back if it drifts or resizes.  
 Press `Ctrl+C` to stop and return the window to a primary monitor position.
+
+## LaunchBox / BigBox Integration
+
+1. Keep using LaunchBox/BigBox on your main display.
+2. Start the watcher before launching games:
+
+```powershell
+python launchbox_crt_watcher.py
+```
+
+3. Launch games normally from LaunchBox/BigBox.
+4. Matching game windows are moved to CRT bounds from `launcher_integration`.
+
+Current detection:
+- Direct executable match via `target_processes` (best for RetroArch, Dolphin, PPSSPP, specific Steam/GOG game EXEs)
+- Parent-process match via `target_parent_processes` (`steam.exe`, `galaxyclient.exe`, `goggalaxy.exe`)
+
+Recommended tuning:
+- Add exact game EXE names to `target_processes` for Steam/GOG titles that do not inherit expected parents.
+- Keep `launchbox.exe` and `bigbox.exe` in `ignore_processes` so frontends stay on the main screen.
 
 ## Calibration Tools
 
@@ -122,4 +176,3 @@ Displays live position/size and a copy-paste config snippet.
 
 - The `tools/` scripts are mostly legacy/hardcoded variants; `crt_master.py` + `launch_*.py` + `crt_config.json` are the current config-driven path.
 - `launch_plex.py` sets DPI awareness and strips title bar while locked for more reliable placement.
-

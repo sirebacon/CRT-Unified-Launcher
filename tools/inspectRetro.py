@@ -1,6 +1,16 @@
 import pygetwindow as gw
 import time
 import os
+import ctypes
+
+# Make coordinate reporting match physical pixels used by the watcher.
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+except Exception:
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
 
 def get_ra_stats():
     # Clear terminal for a clean live view
@@ -11,7 +21,8 @@ def get_ra_stats():
 
     try:
         while True:
-            windows = gw.getWindowsWithTitle('plex')
+            #windows = gw.getWindowsWithTitle('plex')
+            windows = gw.getWindowsWithTitle('retroarch')
             
             if windows:
                 ra = windows[0]
