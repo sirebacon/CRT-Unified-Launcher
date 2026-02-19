@@ -1,4 +1,4 @@
-import win32gui
+﻿import win32gui
 import win32con
 import subprocess
 import time
@@ -18,8 +18,8 @@ PRIMARY_MONITOR = {"x": 100, "y": 100, "w": 1280, "h": 720}
 APPS = {
     "1": {
         "name": "RetroArch",
-        "path": r"D:\RetroArch-Win64\retroarch.exe",
-        "dir": r"D:\RetroArch-Win64",
+        "path": r"D:\Emulators\RetroArch-Win64\retroarch.exe",
+        "dir": r"D:\Emulators\RetroArch-Win64",
         "class": "RetroArch",
         "title": "RetroArch",
         # Updated to your latest confirmed calibration

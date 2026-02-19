@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import subprocess
 import sys
@@ -77,7 +77,7 @@ def move_window(hwnd: int, x: int, y: int, w: int, h: int, pulse: bool) -> None:
 
 def main() -> int:
     cfg = load_config()
-    crt_cfg = cfg.get("launchbox_config", r"D:\RetroArch-Win64\retroarch_crt.cfg")
+    crt_cfg = cfg.get("launchbox_config", r"D:\Emulators\RetroArch-Win64\retroarch_crt.cfg")
     passthrough = list(sys.argv[1:])
 
     args = [cfg["path"]]
@@ -120,3 +120,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

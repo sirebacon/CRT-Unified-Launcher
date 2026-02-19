@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import subprocess
 import sys
@@ -27,8 +27,8 @@ def resolve_ppsspp_exe(cfg: dict) -> Tuple[str, str]:
         return configured, p.get("dir", os.path.dirname(configured))
 
     candidates = [
-        r"D:\PPSSPPWindowsGold\PPSSPPWindows64.exe",
-        r"D:\PPSSPPWindowsGold\PPSSPPWindows.exe",
+        r"D:\Emulators\PPSSPPWindowsGold\PPSSPPWindows64.exe",
+        r"D:\Emulators\PPSSPPWindowsGold\PPSSPPWindows.exe",
     ]
     for exe in candidates:
         if os.path.exists(exe):
@@ -131,3 +131,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

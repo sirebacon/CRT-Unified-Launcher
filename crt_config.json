@@ -4,9 +4,9 @@
     "y": 43,
     "w": 1057,
     "h": 835,
-    "path": "D:\\RetroArch-Win64\\retroarch.exe",
-    "dir": "D:\\RetroArch-Win64",
-    "launchbox_config": "D:\\RetroArch-Win64\\retroarch_crt.cfg"
+    "path": "D:\\Emulators\\RetroArch-Win64\\retroarch.exe",
+    "dir": "D:\\Emulators\\RetroArch-Win64",
+    "launchbox_config": "D:\\Emulators\\RetroArch-Win64\\retroarch_crt.cfg"
   },
   "plex": {
     "x": -1883,
@@ -17,16 +17,24 @@
     "dir": "C:\\Program Files\\Plex\\Plex"
   },
   "ppsspp": {
-    "path": "D:\\PPSSPPWindowsGold\\PPSSPPWindows64.exe",
-    "dir": "D:\\PPSSPPWindowsGold"
+    "path": "D:\\Emulators\\PPSSPPWindowsGold\\PPSSPPWindows64.exe",
+    "dir": "D:\\Emulators\\PPSSPPWindowsGold"
   },
   "dolphin": {
-    "path": "D:\\Dolphin-x64\\Dolphin.exe",
-    "dir": "D:\\Dolphin-x64"
+    "path": "D:\\Emulators\\Dolphin-x64\\Dolphin.exe",
+    "dir": "D:\\Emulators\\Dolphin-x64",
+    "x": -1211,
+    "y": 43,
+    "w": 1060,
+    "h": 835
   },
   "pcsx2": {
-    "path": "D:\\Pcsx2\\pcsx2-qt.exe",
-    "dir": "D:\\Pcsx2"
+    "path": "D:\\Emulators\\Pcsx2\\pcsx2-qt.exe",
+    "dir": "D:\\Emulators\\Pcsx2",
+    "x": -1211,
+    "y": 43,
+    "w": 1057,
+    "h": 848
   },
   "launcher_integration": {
     "enabled": true,
@@ -66,4 +74,6 @@
     }
   }
 }
+
+
 

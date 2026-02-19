@@ -22,7 +22,8 @@ def get_ra_stats():
     try:
         while True:
             #windows = gw.getWindowsWithTitle('plex')
-            windows = gw.getWindowsWithTitle('retroarch')
+            #windows = gw.getWindowsWithTitle('retroarch')
+            windows = gw.getWindowsWithTitle('Dolphin')
             
             if windows:
                 ra = windows[0]

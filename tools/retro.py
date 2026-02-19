@@ -1,4 +1,4 @@
-import win32gui
+﻿import win32gui
 import win32con
 import subprocess
 import time
@@ -6,8 +6,8 @@ import sys
 import os
 
 # --- PATH & TARGET CONFIGURATION ---
-RA_PATH = r"D:\RetroArch-Win64\retroarch.exe"
-RA_DIR = r"D:\RetroArch-Win64"
+RA_PATH = r"D:\Emulators\RetroArch-Win64\retroarch.exe"
+RA_DIR = r"D:\Emulators\RetroArch-Win64"
 
 # --- CRT SETTINGS ---
 CRT_X, CRT_Y = -1211, 43

@@ -1,4 +1,4 @@
-import datetime as dt
+﻿import datetime as dt
 import argparse
 import os
 import shutil
@@ -7,15 +7,15 @@ import xml.etree.ElementTree as ET
 import re
 
 
-LAUNCHBOX_EMULATORS = r"D:\LaunchBox\Data\Emulators.xml"
+LAUNCHBOX_EMULATORS = r"D:\Emulators\LaunchBox\Data\Emulators.xml"
 RETRO_TITLE = "retroarch"
 PPSSPP_TITLE = "ppsspp"
 DOLPHIN_TITLE = "dolphin"
 PCSX2_TITLE = "pcsx2"
-RELATIVE_WRAPPER = r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_retroarch_wrapper.bat"
-RELATIVE_PPSSPP_WRAPPER = r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_ppsspp_wrapper.bat"
-RELATIVE_DOLPHIN_WRAPPER = r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_dolphin_wrapper.bat"
-RELATIVE_PCSX2_WRAPPER = r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_pcsx2_wrapper.bat"
+RELATIVE_WRAPPER = r"..\CRT-Unified-Launcher\integrations\launchbox\wrapper\launchbox_retroarch_wrapper.bat"
+RELATIVE_PPSSPP_WRAPPER = r"..\CRT-Unified-Launcher\integrations\launchbox\wrapper\launchbox_ppsspp_wrapper.bat"
+RELATIVE_DOLPHIN_WRAPPER = r"..\CRT-Unified-Launcher\integrations\launchbox\wrapper\launchbox_dolphin_wrapper.bat"
+RELATIVE_PCSX2_WRAPPER = r"..\CRT-Unified-Launcher\integrations\launchbox\wrapper\launchbox_pcsx2_wrapper.bat"
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 WRAPPER_RETRO = os.path.join(PROJECT_ROOT, "integrations", "launchbox", "wrapper", "launchbox_retroarch_wrapper.bat")
@@ -185,3 +185,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+
+

@@ -1,4 +1,4 @@
-import glob
+﻿import glob
 import os
 import shutil
 from typing import Dict, List, Tuple
@@ -6,20 +6,20 @@ from typing import Dict, List, Tuple
 
 RESTORE_SPECS: Dict[str, Dict] = {
     "Emulators.xml": {
-        "target": r"D:\LaunchBox\Data\Emulators.xml",
-        "patterns": [r"D:\LaunchBox\Data\Emulators.*.pre_default_restore.bak"],
+        "target": r"D:\Emulators\LaunchBox\Data\Emulators.xml",
+        "patterns": [r"D:\Emulators\LaunchBox\Data\Emulators.*.pre_default_restore.bak"],
     },
     "BigBoxSettings.xml": {
-        "target": r"D:\LaunchBox\Data\BigBoxSettings.xml",
-        "patterns": [r"D:\LaunchBox\Data\BigBoxSettings.*.pre_default_restore.bak"],
+        "target": r"D:\Emulators\LaunchBox\Data\BigBoxSettings.xml",
+        "patterns": [r"D:\Emulators\LaunchBox\Data\BigBoxSettings.*.pre_default_restore.bak"],
     },
     "Settings.xml": {
-        "target": r"D:\LaunchBox\Data\Settings.xml",
-        "patterns": [r"D:\LaunchBox\Data\Settings.*.pre_default_restore.bak"],
+        "target": r"D:\Emulators\LaunchBox\Data\Settings.xml",
+        "patterns": [r"D:\Emulators\LaunchBox\Data\Settings.*.pre_default_restore.bak"],
     },
     "retroarch.cfg": {
-        "target": r"D:\RetroArch-Win64\retroarch.cfg",
-        "patterns": [r"D:\RetroArch-Win64\retroarch.*.pre_default_restore.bak"],
+        "target": r"D:\Emulators\RetroArch-Win64\retroarch.cfg",
+        "patterns": [r"D:\Emulators\RetroArch-Win64\retroarch.*.pre_default_restore.bak"],
     },
 }
 
@@ -58,3 +58,4 @@ def restore_defaults_from_backup() -> Tuple[bool, str, List[str]]:
         )
 
     return True, "Default settings restored from backup files.", restored
+

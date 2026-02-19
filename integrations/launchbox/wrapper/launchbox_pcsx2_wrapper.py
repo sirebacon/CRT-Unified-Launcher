@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import subprocess
 import sys
@@ -28,8 +28,8 @@ def resolve_pcsx2_exe(cfg: dict) -> Tuple[str, str]:
         return configured, p.get("dir", os.path.dirname(configured))
 
     candidates = [
-        r"D:\Pcsx2\pcsx2-qt.exe",
-        r"D:\Pcsx2\pcsx2.exe",
+        r"D:\Emulators\Pcsx2\pcsx2-qt.exe",
+        r"D:\Emulators\Pcsx2\pcsx2.exe",
     ]
     for exe in candidates:
         if os.path.exists(exe):
@@ -145,3 +145,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

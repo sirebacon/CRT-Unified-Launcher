@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import re
 import shutil
@@ -8,10 +8,10 @@ import xml.etree.ElementTree as ET
 
 
 FILES = {
-    "emulators": r"D:\LaunchBox\Data\Emulators.xml",
-    "bigbox": r"D:\LaunchBox\Data\BigBoxSettings.xml",
-    "settings": r"D:\LaunchBox\Data\Settings.xml",
-    "retroarch_cfg": r"D:\RetroArch-Win64\retroarch.cfg",
+    "emulators": r"D:\Emulators\LaunchBox\Data\Emulators.xml",
+    "bigbox": r"D:\Emulators\LaunchBox\Data\BigBoxSettings.xml",
+    "settings": r"D:\Emulators\LaunchBox\Data\Settings.xml",
+    "retroarch_cfg": r"D:\Emulators\RetroArch-Win64\retroarch.cfg",
 }
 
 
@@ -81,7 +81,7 @@ def _patch_emulators(emulators_path: str) -> None:
             _set_text(
                 emulator,
                 "ApplicationPath",
-                r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_retroarch_wrapper.bat",
+                r"..\CRT-Unified-Launcher\integrations\launchbox\wrapper\launchbox_retroarch_wrapper.bat",
             )
             _set_text(emulator, "UseStartupScreen", "false")
             _set_text(emulator, "StartupLoadDelay", "0")
@@ -91,7 +91,7 @@ def _patch_emulators(emulators_path: str) -> None:
             _set_text(
                 emulator,
                 "ApplicationPath",
-                r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_ppsspp_wrapper.bat",
+                r"..\CRT-Unified-Launcher\integrations\launchbox\wrapper\launchbox_ppsspp_wrapper.bat",
             )
             _set_text(emulator, "UseStartupScreen", "false")
             _set_text(emulator, "StartupLoadDelay", "0")
@@ -101,7 +101,7 @@ def _patch_emulators(emulators_path: str) -> None:
             _set_text(
                 emulator,
                 "ApplicationPath",
-                r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_dolphin_wrapper.bat",
+                r"..\CRT-Unified-Launcher\integrations\launchbox\wrapper\launchbox_dolphin_wrapper.bat",
             )
             _set_text(emulator, "UseStartupScreen", "false")
             _set_text(emulator, "StartupLoadDelay", "0")
@@ -111,7 +111,7 @@ def _patch_emulators(emulators_path: str) -> None:
             _set_text(
                 emulator,
                 "ApplicationPath",
-                r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_pcsx2_wrapper.bat",
+                r"..\CRT-Unified-Launcher\integrations\launchbox\wrapper\launchbox_pcsx2_wrapper.bat",
             )
             _set_text(emulator, "UseStartupScreen", "false")
             _set_text(emulator, "StartupLoadDelay", "0")
@@ -233,3 +233,7 @@ def restore_session_mode(backup_dir: str) -> Tuple[bool, str]:
         return True, "Restored default settings from session backup."
     except Exception as e:
         return False, f"Failed to restore session mode backup: {e}"
+
+
+
+
