@@ -16,6 +16,10 @@
     "path": "C:\\Program Files\\Plex\\Plex\\Plex.exe",
     "dir": "C:\\Program Files\\Plex\\Plex"
   },
+  "ppsspp": {
+    "path": "D:\\PPSSPPWindowsGold\\PPSSPPWindows64.exe",
+    "dir": "D:\\PPSSPPWindowsGold"
+  },
   "launcher_integration": {
     "enabled": true,
     "main_monitor_index": 1,

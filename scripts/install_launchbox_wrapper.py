@@ -1,4 +1,5 @@
 import datetime as dt
+import argparse
 import os
 import shutil
 import sys
@@ -7,7 +8,13 @@ import xml.etree.ElementTree as ET
 
 LAUNCHBOX_EMULATORS = r"D:\LaunchBox\Data\Emulators.xml"
 RETRO_TITLE = "retroarch"
+PPSSPP_TITLE = "ppsspp"
 RELATIVE_WRAPPER = r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_retroarch_wrapper.bat"
+RELATIVE_PPSSPP_WRAPPER = r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_ppsspp_wrapper.bat"
+SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
+PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
+WRAPPER_RETRO = os.path.join(PROJECT_ROOT, "integrations", "launchbox", "wrapper", "launchbox_retroarch_wrapper.bat")
+WRAPPER_PPSSPP = os.path.join(PROJECT_ROOT, "integrations", "launchbox", "wrapper", "launchbox_ppsspp_wrapper.bat")
 
 
 def backup_file(path: str) -> str:
@@ -25,19 +32,25 @@ def patch_emulators(path: str) -> bool:
 
     changed = False
     retro_id = None
+    ppsspp_id = None
     for emulator in root.findall("Emulator"):
         title = (emulator.findtext("Title") or "").strip().lower()
-        if title != RETRO_TITLE:
-            continue
-        retro_id = (emulator.findtext("ID") or "").strip()
-
-        app_path = emulator.find("ApplicationPath")
-        if app_path is None:
-            app_path = ET.SubElement(emulator, "ApplicationPath")
-        if app_path.text != RELATIVE_WRAPPER:
-            app_path.text = RELATIVE_WRAPPER
-            changed = True
-        break
+        if title == RETRO_TITLE:
+            retro_id = (emulator.findtext("ID") or "").strip()
+            app_path = emulator.find("ApplicationPath")
+            if app_path is None:
+                app_path = ET.SubElement(emulator, "ApplicationPath")
+            if app_path.text != RELATIVE_WRAPPER:
+                app_path.text = RELATIVE_WRAPPER
+                changed = True
+        elif title == PPSSPP_TITLE:
+            ppsspp_id = (emulator.findtext("ID") or "").strip()
+            app_path = emulator.find("ApplicationPath")
+            if app_path is None:
+                app_path = ET.SubElement(emulator, "ApplicationPath")
+            if app_path.text != RELATIVE_PPSSPP_WRAPPER:
+                app_path.text = RELATIVE_PPSSPP_WRAPPER
+                changed = True
 
     if retro_id:
         for platform in root.findall("EmulatorPlatform"):
@@ -51,12 +64,51 @@ def patch_emulators(path: str) -> bool:
             if cmd.text != original:
                 changed = True
 
+    if ppsspp_id:
+        for platform in root.findall("EmulatorPlatform"):
+            if (platform.findtext("Emulator") or "").strip() != ppsspp_id:
+                continue
+            cmd = platform.find("CommandLine")
+            if cmd is None or cmd.text is None:
+                continue
+            original = cmd.text
+            cmd.text = " ".join(t for t in original.split() if t.lower() != "--fullscreen")
+            if cmd.text != original:
+                changed = True
+
     if changed:
         tree.write(path, encoding="utf-8", xml_declaration=True)
     return changed
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Install/verify LaunchBox wrapper integration."
+    )
+    parser.add_argument(
+        "--global",
+        dest="global_mode",
+        action="store_true",
+        help="Patch LaunchBox Emulators.xml globally to always use wrappers.",
+    )
+    args = parser.parse_args()
+
+    missing = [p for p in (WRAPPER_RETRO, WRAPPER_PPSSPP) if not os.path.exists(p)]
+    if missing:
+        print("Missing wrapper file(s):")
+        for path in missing:
+            print(f" - {path}")
+        return 1
+
+    if not args.global_mode:
+        print("Session-only-safe mode (default): no global LaunchBox changes made.")
+        print("Wrappers detected:")
+        print(f" - {WRAPPER_RETRO}")
+        print(f" - {WRAPPER_PPSSPP}")
+        print("Use crt_master.py option 2 for temporary session patching.")
+        print("Use --global only if you want always-on wrapper patching.")
+        return 0
+
     if not os.path.exists(LAUNCHBOX_EMULATORS):
         print(f"LaunchBox Emulators.xml not found: {LAUNCHBOX_EMULATORS}")
         return 1
@@ -66,7 +118,7 @@ def main() -> int:
 
     print(f"Backup: {backup}")
     if changed:
-        print("Patched RetroArch emulator to use wrapper.")
+        print("Patched RetroArch/PPSSPP emulators to use wrappers.")
     else:
         print("No changes needed; wrapper already configured.")
     return 0

@@ -71,6 +71,7 @@ def _patch_emulators(emulators_path: str) -> None:
     root = tree.getroot()
 
     retro_id: Optional[str] = None
+    ppsspp_id: Optional[str] = None
     for emulator in root.findall("Emulator"):
         title = (emulator.findtext("Title") or "").strip().lower()
         if title == "retroarch":
@@ -83,7 +84,16 @@ def _patch_emulators(emulators_path: str) -> None:
             _set_text(emulator, "UseStartupScreen", "false")
             _set_text(emulator, "StartupLoadDelay", "0")
             _set_text(emulator, "HideMouseCursorInGame", "false")
-            break
+        elif title == "ppsspp":
+            ppsspp_id = (emulator.findtext("ID") or "").strip()
+            _set_text(
+                emulator,
+                "ApplicationPath",
+                r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_ppsspp_wrapper.bat",
+            )
+            _set_text(emulator, "UseStartupScreen", "false")
+            _set_text(emulator, "StartupLoadDelay", "0")
+            _set_text(emulator, "HideMouseCursorInGame", "false")
 
     if retro_id:
         for platform in root.findall("EmulatorPlatform"):
@@ -94,6 +104,17 @@ def _patch_emulators(emulators_path: str) -> None:
                 continue
             cmd = cmd_node.text
             cmd = re.sub(r"(^|\s)-f(?=\s|$)", r"\1", cmd).strip()
+            cmd_node.text = cmd
+
+    if ppsspp_id:
+        for platform in root.findall("EmulatorPlatform"):
+            if (platform.findtext("Emulator") or "").strip() != ppsspp_id:
+                continue
+            cmd_node = platform.find("CommandLine")
+            if cmd_node is None or cmd_node.text is None:
+                continue
+            cmd = cmd_node.text
+            cmd = re.sub(r"(^|\s)--fullscreen(?=\s|$)", r"\1", cmd).strip()
             cmd_node.text = cmd
 
     _save_tree(tree, emulators_path)

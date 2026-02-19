@@ -12,6 +12,7 @@ The project keeps app windows snapped to calibrated CRT bounds, and returns them
 - `launch_plex.py` for Plex
 - `launchbox_crt_watcher.py` for LaunchBox/BigBox game launches
 - LaunchBox RetroArch wrapper in `integrations/launchbox/wrapper/`
+- LaunchBox PPSSPP wrapper in `integrations/launchbox/wrapper/`
 - Shared JSON config (`crt_config.json`) for paths and target window geometry
 - Utility tools in `tools/` for calibration, inspection, and older standalone workflows
 
@@ -43,7 +44,9 @@ pip install pywin32 keyboard pygetwindow psutil
 - `launchbox_session_mode.py`: applies temporary CRT session patches for option `2`, then restores defaults
 - `integrations/launchbox/wrapper/launchbox_retroarch_wrapper.py`: wrapper for stable LaunchBox RetroArch startup behavior
 - `integrations/launchbox/wrapper/launchbox_retroarch_wrapper.bat`: LaunchBox entry point for wrapper
-- `scripts/install_launchbox_wrapper.py`: backup + patch helper to wire LaunchBox RetroArch to the wrapper
+- `integrations/launchbox/wrapper/launchbox_ppsspp_wrapper.py`: wrapper for stable LaunchBox PPSSPP startup behavior
+- `integrations/launchbox/wrapper/launchbox_ppsspp_wrapper.bat`: LaunchBox entry point for PPSSPP wrapper
+- `scripts/install_launchbox_wrapper.py`: backup + patch helper to wire LaunchBox RetroArch/PPSSPP to wrappers
 - `crt_config.json`: shared coordinates + executable paths
 - `tools/retro.py`: older standalone RetroArch locker with hardcoded values
 - `tools/plex.py`: older standalone Plex locker + INI sync with hardcoded values
@@ -72,6 +75,10 @@ Edit `crt_config.json`:
     "h": 1184,
     "path": "C:\\Program Files\\Plex\\Plex\\Plex.exe",
     "dir": "C:\\Program Files\\Plex\\Plex"
+  },
+  "ppsspp": {
+    "path": "D:\\PPSSPPWindowsGold\\PPSSPPWindows64.exe",
+    "dir": "D:\\PPSSPPWindowsGold"
   },
   "launcher_integration": {
     "enabled": true,
@@ -165,10 +172,21 @@ python scripts\install_launchbox_wrapper.py
 ```
 
 This script:
-- creates a timestamped backup of `D:\LaunchBox\Data\Emulators.xml`
-- sets RetroArch emulator `ApplicationPath` to:
+- default mode is session-only-safe: validates wrapper files and makes no global LaunchBox changes
+- to force global patching, run:
+
+```powershell
+python scripts\install_launchbox_wrapper.py --global
+```
+
+Global mode will:
+- create a timestamped backup of `D:\LaunchBox\Data\Emulators.xml`
+- set RetroArch emulator `ApplicationPath` to:
 `..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_retroarch_wrapper.bat`
-- removes `-f` from RetroArch associated platform command lines
+- set PPSSPP emulator `ApplicationPath` to:
+`..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_ppsspp_wrapper.bat`
+- remove `-f` from RetroArch associated platform command lines
+- remove `--fullscreen` from PPSSPP associated platform command lines
 
 ## Calibration Tools
 
