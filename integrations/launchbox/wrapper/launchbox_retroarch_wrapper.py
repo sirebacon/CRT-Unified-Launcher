@@ -11,15 +11,17 @@ import win32process
 
 
 Rect = Tuple[int, int, int, int]
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+CONFIG_PATH = os.path.join(PROJECT_ROOT, "crt_config.json")
 
 
 def load_config() -> dict:
-    with open("crt_config.json", "r", encoding="utf-8-sig") as f:
+    with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
         return json.load(f)["retroarch"]
 
 
 def has_config_arg(argv) -> bool:
-    for i, arg in enumerate(argv):
+    for arg in argv:
         if arg == "--config":
             return True
         if arg.startswith("--config="):
@@ -57,8 +59,7 @@ def find_hwnd_for_pid(pid: int) -> Optional[int]:
             _, win_pid = win32process.GetWindowThreadProcessId(hwnd)
             if win_pid != pid:
                 continue
-            cls = win32gui.GetClassName(hwnd)
-            if cls == "RetroArch":
+            if win32gui.GetClassName(hwnd) == "RetroArch":
                 return hwnd
         except Exception:
             continue
@@ -68,7 +69,6 @@ def find_hwnd_for_pid(pid: int) -> Optional[int]:
 def move_window(hwnd: int, x: int, y: int, w: int, h: int, pulse: bool) -> None:
     win32gui.SetWindowPos(hwnd, win32con.HWND_TOP, x, y, w, h, win32con.SWP_SHOWWINDOW)
     if pulse:
-        # Force viewport recalculation during early startup/content load.
         win32gui.SetWindowPos(
             hwnd, win32con.HWND_TOP, x, y, w + 1, h + 1, win32con.SWP_SHOWWINDOW
         )
@@ -109,12 +109,10 @@ def main() -> int:
                         if pulse:
                             pulsed = True
                     else:
-                        # Stop enforcing once the window has settled at target.
                         if (time.time() - last_not_target) >= settle_seconds:
                             lock_active = False
                 except Exception:
                     pass
-
         time.sleep(0.1 if elapsed < 10.0 else 0.5)
 
     return proc.returncode if proc.returncode is not None else 0

@@ -11,6 +11,7 @@ FILES = {
     "emulators": r"D:\LaunchBox\Data\Emulators.xml",
     "bigbox": r"D:\LaunchBox\Data\BigBoxSettings.xml",
     "settings": r"D:\LaunchBox\Data\Settings.xml",
+    "retroarch_cfg": r"D:\RetroArch-Win64\retroarch.cfg",
 }
 
 
@@ -74,6 +75,11 @@ def _patch_emulators(emulators_path: str) -> None:
         title = (emulator.findtext("Title") or "").strip().lower()
         if title == "retroarch":
             retro_id = (emulator.findtext("ID") or "").strip()
+            _set_text(
+                emulator,
+                "ApplicationPath",
+                r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_retroarch_wrapper.bat",
+            )
             _set_text(emulator, "UseStartupScreen", "false")
             _set_text(emulator, "StartupLoadDelay", "0")
             _set_text(emulator, "HideMouseCursorInGame", "false")
@@ -93,15 +99,61 @@ def _patch_emulators(emulators_path: str) -> None:
     _save_tree(tree, emulators_path)
 
 
+def _patch_retroarch_cfg(cfg_path: str, target_w: int, target_h: int) -> None:
+    ratio = target_w / target_h if target_h else (4.0 / 3.0)
+    desired = {
+        "video_fullscreen": "false",
+        "video_windowed_fullscreen": "false",
+        "video_window_show_decorations": "false",
+        # Fill the full CRT window without pillar/letterboxing from aspect forcing.
+        "video_force_aspect": "false",
+        "video_scale_integer": "false",
+        "custom_viewport_width": "0",
+        "custom_viewport_height": "0",
+        "custom_viewport_x": "0",
+        "custom_viewport_y": "0",
+        "video_aspect_ratio_auto": "false",
+        "video_aspect_ratio": f"{ratio:.6f}",
+    }
+
+    lines = []
+    with open(cfg_path, "r", encoding="utf-8-sig") as f:
+        lines = f.read().splitlines()
+
+    seen = set()
+    output = []
+    for line in lines:
+        stripped = line.strip()
+        replaced = False
+        for key, value in desired.items():
+            if stripped.startswith(f"{key} = "):
+                output.append(f'{key} = "{value}"')
+                seen.add(key)
+                replaced = True
+                break
+        if not replaced:
+            output.append(line)
+
+    for key, value in desired.items():
+        if key not in seen:
+            output.append(f'{key} = "{value}"')
+
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(output) + "\n")
+
+
 def apply_crt_session_mode() -> Tuple[bool, str, Optional[str]]:
     try:
         cfg = _load_json_config()
         monitor_index = int(cfg.get("launcher_integration", {}).get("main_monitor_index", 1))
+        target_w = int(cfg.get("launcher_integration", {}).get("w", cfg.get("retroarch", {}).get("w", 1057)))
+        target_h = int(cfg.get("launcher_integration", {}).get("h", cfg.get("retroarch", {}).get("h", 835)))
         backup_dir = _backup_files()
 
         _patch_bigbox(FILES["bigbox"], monitor_index)
         _patch_launchbox_settings(FILES["settings"])
         _patch_emulators(FILES["emulators"])
+        _patch_retroarch_cfg(FILES["retroarch_cfg"], target_w, target_h)
         return True, "CRT session mode applied.", backup_dir
     except Exception as e:
         return False, f"Failed to apply CRT session mode: {e}", None

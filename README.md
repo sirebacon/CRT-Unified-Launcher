@@ -11,6 +11,7 @@ The project keeps app windows snapped to calibrated CRT bounds, and returns them
 - `launch_ra.py` for RetroArch
 - `launch_plex.py` for Plex
 - `launchbox_crt_watcher.py` for LaunchBox/BigBox game launches
+- LaunchBox RetroArch wrapper in `integrations/launchbox/wrapper/`
 - Shared JSON config (`crt_config.json`) for paths and target window geometry
 - Utility tools in `tools/` for calibration, inspection, and older standalone workflows
 
@@ -39,6 +40,10 @@ pip install pywin32 keyboard pygetwindow psutil
 - `launch_ra.py`: launches/locks RetroArch window using `crt_config.json`
 - `launch_plex.py`: launches/locks Plex window using `crt_config.json` and removes borders while locked
 - `launchbox_crt_watcher.py`: keeps LaunchBox/BigBox on primary while moving matching game windows to CRT
+- `launchbox_session_mode.py`: applies temporary CRT session patches for option `2`, then restores defaults
+- `integrations/launchbox/wrapper/launchbox_retroarch_wrapper.py`: wrapper for stable LaunchBox RetroArch startup behavior
+- `integrations/launchbox/wrapper/launchbox_retroarch_wrapper.bat`: LaunchBox entry point for wrapper
+- `scripts/install_launchbox_wrapper.py`: backup + patch helper to wire LaunchBox RetroArch to the wrapper
 - `crt_config.json`: shared coordinates + executable paths
 - `tools/retro.py`: older standalone RetroArch locker with hardcoded values
 - `tools/plex.py`: older standalone Plex locker + INI sync with hardcoded values
@@ -116,8 +121,9 @@ python crt_master.py
 
 Menu options:
 - `1`: launch/lock RetroArch
-- `2`: launch/lock Plex
-- `3`: exit menu
+- `2`: LaunchBox session mode (temporary CRT profile + watcher)
+- `3`: launch/lock Plex
+- `4`: exit menu
 
 Or run directly:
 
@@ -149,6 +155,20 @@ Current detection:
 Recommended tuning:
 - Add exact game EXE names to `target_processes` for Steam/GOG titles that do not inherit expected parents.
 - Keep `launchbox.exe` and `bigbox.exe` in `ignore_processes` so frontends stay on the main screen.
+
+### Install Wrapper (From Scratch)
+
+If you need to re-wire LaunchBox to the RetroArch wrapper manually:
+
+```powershell
+python scripts\install_launchbox_wrapper.py
+```
+
+This script:
+- creates a timestamped backup of `D:\LaunchBox\Data\Emulators.xml`
+- sets RetroArch emulator `ApplicationPath` to:
+`..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_retroarch_wrapper.bat`
+- removes `-f` from RetroArch associated platform command lines
 
 ## Calibration Tools
 

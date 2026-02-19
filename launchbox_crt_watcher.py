@@ -214,6 +214,9 @@ def should_move(hwnd: int, cfg: Dict) -> bool:
     name = process_name(proc)
     if not name:
         return False
+    # RetroArch is handled by launchbox_retroarch_wrapper.py during LaunchBox session mode.
+    if name == "retroarch.exe":
+        return False
     if name in cfg["ignore_processes"]:
         return False
     if name in cfg["target_processes"]:
