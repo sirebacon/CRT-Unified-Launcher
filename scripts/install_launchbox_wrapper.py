@@ -4,17 +4,21 @@ import os
 import shutil
 import sys
 import xml.etree.ElementTree as ET
+import re
 
 
 LAUNCHBOX_EMULATORS = r"D:\LaunchBox\Data\Emulators.xml"
 RETRO_TITLE = "retroarch"
 PPSSPP_TITLE = "ppsspp"
+DOLPHIN_TITLE = "dolphin"
 RELATIVE_WRAPPER = r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_retroarch_wrapper.bat"
 RELATIVE_PPSSPP_WRAPPER = r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_ppsspp_wrapper.bat"
+RELATIVE_DOLPHIN_WRAPPER = r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_dolphin_wrapper.bat"
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 WRAPPER_RETRO = os.path.join(PROJECT_ROOT, "integrations", "launchbox", "wrapper", "launchbox_retroarch_wrapper.bat")
 WRAPPER_PPSSPP = os.path.join(PROJECT_ROOT, "integrations", "launchbox", "wrapper", "launchbox_ppsspp_wrapper.bat")
+WRAPPER_DOLPHIN = os.path.join(PROJECT_ROOT, "integrations", "launchbox", "wrapper", "launchbox_dolphin_wrapper.bat")
 
 
 def backup_file(path: str) -> str:
@@ -33,6 +37,7 @@ def patch_emulators(path: str) -> bool:
     changed = False
     retro_id = None
     ppsspp_id = None
+    dolphin_id = None
     for emulator in root.findall("Emulator"):
         title = (emulator.findtext("Title") or "").strip().lower()
         if title == RETRO_TITLE:
@@ -50,6 +55,14 @@ def patch_emulators(path: str) -> bool:
                 app_path = ET.SubElement(emulator, "ApplicationPath")
             if app_path.text != RELATIVE_PPSSPP_WRAPPER:
                 app_path.text = RELATIVE_PPSSPP_WRAPPER
+                changed = True
+        elif title == DOLPHIN_TITLE:
+            dolphin_id = (emulator.findtext("ID") or "").strip()
+            app_path = emulator.find("ApplicationPath")
+            if app_path is None:
+                app_path = ET.SubElement(emulator, "ApplicationPath")
+            if app_path.text != RELATIVE_DOLPHIN_WRAPPER:
+                app_path.text = RELATIVE_DOLPHIN_WRAPPER
                 changed = True
 
     if retro_id:
@@ -76,6 +89,22 @@ def patch_emulators(path: str) -> bool:
             if cmd.text != original:
                 changed = True
 
+    if dolphin_id:
+        for platform in root.findall("EmulatorPlatform"):
+            if (platform.findtext("Emulator") or "").strip() != dolphin_id:
+                continue
+            cmd = platform.find("CommandLine")
+            if cmd is None or cmd.text is None:
+                continue
+            original = cmd.text
+            cmd.text = re.sub(
+                r"(^|\s)-C\s+Dolphin\.Display\.Fullscreen=True(?=\s|$)",
+                r"\1",
+                original,
+            ).strip()
+            if cmd.text != original:
+                changed = True
+
     if changed:
         tree.write(path, encoding="utf-8", xml_declaration=True)
     return changed
@@ -93,7 +122,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    missing = [p for p in (WRAPPER_RETRO, WRAPPER_PPSSPP) if not os.path.exists(p)]
+    missing = [p for p in (WRAPPER_RETRO, WRAPPER_PPSSPP, WRAPPER_DOLPHIN) if not os.path.exists(p)]
     if missing:
         print("Missing wrapper file(s):")
         for path in missing:
@@ -105,6 +134,7 @@ def main() -> int:
         print("Wrappers detected:")
         print(f" - {WRAPPER_RETRO}")
         print(f" - {WRAPPER_PPSSPP}")
+        print(f" - {WRAPPER_DOLPHIN}")
         print("Use crt_master.py option 2 for temporary session patching.")
         print("Use --global only if you want always-on wrapper patching.")
         return 0
@@ -118,7 +148,7 @@ def main() -> int:
 
     print(f"Backup: {backup}")
     if changed:
-        print("Patched RetroArch/PPSSPP emulators to use wrappers.")
+        print("Patched RetroArch/PPSSPP/Dolphin emulators to use wrappers.")
     else:
         print("No changes needed; wrapper already configured.")
     return 0

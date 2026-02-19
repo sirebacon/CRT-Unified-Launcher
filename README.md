@@ -13,6 +13,7 @@ The project keeps app windows snapped to calibrated CRT bounds, and returns them
 - `launchbox_crt_watcher.py` for LaunchBox/BigBox game launches
 - LaunchBox RetroArch wrapper in `integrations/launchbox/wrapper/`
 - LaunchBox PPSSPP wrapper in `integrations/launchbox/wrapper/`
+- LaunchBox Dolphin wrapper in `integrations/launchbox/wrapper/`
 - Shared JSON config (`crt_config.json`) for paths and target window geometry
 - Utility tools in `tools/` for calibration, inspection, and older standalone workflows
 
@@ -46,7 +47,9 @@ pip install pywin32 keyboard pygetwindow psutil
 - `integrations/launchbox/wrapper/launchbox_retroarch_wrapper.bat`: LaunchBox entry point for wrapper
 - `integrations/launchbox/wrapper/launchbox_ppsspp_wrapper.py`: wrapper for stable LaunchBox PPSSPP startup behavior
 - `integrations/launchbox/wrapper/launchbox_ppsspp_wrapper.bat`: LaunchBox entry point for PPSSPP wrapper
-- `scripts/install_launchbox_wrapper.py`: backup + patch helper to wire LaunchBox RetroArch/PPSSPP to wrappers
+- `integrations/launchbox/wrapper/launchbox_dolphin_wrapper.py`: wrapper for stable LaunchBox Dolphin startup behavior
+- `integrations/launchbox/wrapper/launchbox_dolphin_wrapper.bat`: LaunchBox entry point for Dolphin wrapper
+- `scripts/install_launchbox_wrapper.py`: backup + patch helper to wire LaunchBox RetroArch/PPSSPP/Dolphin to wrappers
 - `crt_config.json`: shared coordinates + executable paths
 - `tools/retro.py`: older standalone RetroArch locker with hardcoded values
 - `tools/plex.py`: older standalone Plex locker + INI sync with hardcoded values
@@ -79,6 +82,10 @@ Edit `crt_config.json`:
   "ppsspp": {
     "path": "D:\\PPSSPPWindowsGold\\PPSSPPWindows64.exe",
     "dir": "D:\\PPSSPPWindowsGold"
+  },
+  "dolphin": {
+    "path": "D:\\Dolphin-x64\\Dolphin.exe",
+    "dir": "D:\\Dolphin-x64"
   },
   "launcher_integration": {
     "enabled": true,
@@ -185,8 +192,11 @@ Global mode will:
 `..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_retroarch_wrapper.bat`
 - set PPSSPP emulator `ApplicationPath` to:
 `..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_ppsspp_wrapper.bat`
+- set Dolphin emulator `ApplicationPath` to:
+`..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_dolphin_wrapper.bat`
 - remove `-f` from RetroArch associated platform command lines
 - remove `--fullscreen` from PPSSPP associated platform command lines
+- remove `-C Dolphin.Display.Fullscreen=True` from Dolphin associated platform command lines
 
 ## Calibration Tools
 

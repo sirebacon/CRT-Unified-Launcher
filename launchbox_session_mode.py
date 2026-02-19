@@ -72,6 +72,7 @@ def _patch_emulators(emulators_path: str) -> None:
 
     retro_id: Optional[str] = None
     ppsspp_id: Optional[str] = None
+    dolphin_id: Optional[str] = None
     for emulator in root.findall("Emulator"):
         title = (emulator.findtext("Title") or "").strip().lower()
         if title == "retroarch":
@@ -90,6 +91,16 @@ def _patch_emulators(emulators_path: str) -> None:
                 emulator,
                 "ApplicationPath",
                 r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_ppsspp_wrapper.bat",
+            )
+            _set_text(emulator, "UseStartupScreen", "false")
+            _set_text(emulator, "StartupLoadDelay", "0")
+            _set_text(emulator, "HideMouseCursorInGame", "false")
+        elif title == "dolphin":
+            dolphin_id = (emulator.findtext("ID") or "").strip()
+            _set_text(
+                emulator,
+                "ApplicationPath",
+                r"..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_dolphin_wrapper.bat",
             )
             _set_text(emulator, "UseStartupScreen", "false")
             _set_text(emulator, "StartupLoadDelay", "0")
@@ -115,6 +126,17 @@ def _patch_emulators(emulators_path: str) -> None:
                 continue
             cmd = cmd_node.text
             cmd = re.sub(r"(^|\s)--fullscreen(?=\s|$)", r"\1", cmd).strip()
+            cmd_node.text = cmd
+
+    if dolphin_id:
+        for platform in root.findall("EmulatorPlatform"):
+            if (platform.findtext("Emulator") or "").strip() != dolphin_id:
+                continue
+            cmd_node = platform.find("CommandLine")
+            if cmd_node is None or cmd_node.text is None:
+                continue
+            cmd = cmd_node.text
+            cmd = re.sub(r"(^|\s)-C\s+Dolphin\.Display\.Fullscreen=True(?=\s|$)", r"\1", cmd).strip()
             cmd_node.text = cmd
 
     _save_tree(tree, emulators_path)

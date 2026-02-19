@@ -20,6 +20,10 @@
     "path": "D:\\PPSSPPWindowsGold\\PPSSPPWindows64.exe",
     "dir": "D:\\PPSSPPWindowsGold"
   },
+  "dolphin": {
+    "path": "D:\\Dolphin-x64\\Dolphin.exe",
+    "dir": "D:\\Dolphin-x64"
+  },
   "launcher_integration": {
     "enabled": true,
     "main_monitor_index": 1,
