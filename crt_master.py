@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 
+from default_restore import restore_defaults_from_backup
 from launchbox_session_mode import apply_crt_session_mode, restore_session_mode
 
 LAUNCHBOX_EXE = r"D:\LaunchBox\LaunchBox.exe"
@@ -16,11 +17,12 @@ def main():
         print(" 1. [GAMING] Launch RetroArch")
         print(" 2. [GAMING] Launch LaunchBox CRT Watcher")
         print(" 3. [CINEMA] Launch Plex")
-        print(" 4. [EXIT]   Close Menu")
+        print(" 4. [TOOLS]  Restore Default Settings")
+        print(" 5. [EXIT]   Close Menu")
         print("========================================")
         
         try:
-            choice = input("\nSelect an option (1-4): ")
+            choice = input("\nSelect an option (1-5): ")
             if choice == '1':
                 subprocess.run([sys.executable, "launch_ra.py"])
             elif choice == '2':
@@ -51,6 +53,14 @@ def main():
             elif choice == '3':
                 subprocess.run([sys.executable, "launch_plex.py"])
             elif choice == '4':
+                ok, msg, restored = restore_defaults_from_backup()
+                print(msg)
+                if restored:
+                    print("\nRestored files:")
+                    for item in restored:
+                        print(f" - {item}")
+                input("\nPress Enter to return to menu...")
+            elif choice == '5':
                 break
         except KeyboardInterrupt:
             print("\nExiting...")
