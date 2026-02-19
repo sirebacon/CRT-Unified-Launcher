@@ -1,0 +1,18 @@
+{
+  "retroarch": {
+    "x": -1211,
+    "y": 43,
+    "w": 1057,
+    "h": 835,
+    "path": "D:\\RetroArch-Win64\\retroarch.exe",
+    "dir": "D:\\RetroArch-Win64"
+  },
+  "plex": {
+    "x": -1883,
+    "y": 130,
+    "w": 1720,
+    "h": 1184,
+    "path": "C:\\Program Files\\Plex\\Plex\\Plex.exe",
+    "dir": "C:\\Program Files\\Plex\\Plex"
+  }
+}
