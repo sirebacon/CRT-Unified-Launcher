@@ -215,7 +215,14 @@ def should_move(hwnd: int, cfg: Dict) -> bool:
     if not name:
         return False
     # Wrapper-managed emulators are excluded to avoid move conflicts/oscillation.
-    if name in {"retroarch.exe", "ppssppwindows64.exe", "ppssppwindows.exe", "dolphin.exe"}:
+    if name in {
+        "retroarch.exe",
+        "ppssppwindows64.exe",
+        "ppssppwindows.exe",
+        "dolphin.exe",
+        "pcsx2-qt.exe",
+        "pcsx2.exe",
+    }:
         return False
     if name in cfg["ignore_processes"]:
         return False

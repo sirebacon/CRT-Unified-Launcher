@@ -14,6 +14,7 @@ The project keeps app windows snapped to calibrated CRT bounds, and returns them
 - LaunchBox RetroArch wrapper in `integrations/launchbox/wrapper/`
 - LaunchBox PPSSPP wrapper in `integrations/launchbox/wrapper/`
 - LaunchBox Dolphin wrapper in `integrations/launchbox/wrapper/`
+- LaunchBox PCSX2 wrapper in `integrations/launchbox/wrapper/`
 - Shared JSON config (`crt_config.json`) for paths and target window geometry
 - Utility tools in `tools/` for calibration, inspection, and older standalone workflows
 
@@ -49,7 +50,9 @@ pip install pywin32 keyboard pygetwindow psutil
 - `integrations/launchbox/wrapper/launchbox_ppsspp_wrapper.bat`: LaunchBox entry point for PPSSPP wrapper
 - `integrations/launchbox/wrapper/launchbox_dolphin_wrapper.py`: wrapper for stable LaunchBox Dolphin startup behavior
 - `integrations/launchbox/wrapper/launchbox_dolphin_wrapper.bat`: LaunchBox entry point for Dolphin wrapper
-- `scripts/install_launchbox_wrapper.py`: backup + patch helper to wire LaunchBox RetroArch/PPSSPP/Dolphin to wrappers
+- `integrations/launchbox/wrapper/launchbox_pcsx2_wrapper.py`: wrapper for stable LaunchBox PCSX2 startup behavior
+- `integrations/launchbox/wrapper/launchbox_pcsx2_wrapper.bat`: LaunchBox entry point for PCSX2 wrapper
+- `scripts/install_launchbox_wrapper.py`: backup + patch helper to wire LaunchBox RetroArch/PPSSPP/Dolphin/PCSX2 to wrappers
 - `crt_config.json`: shared coordinates + executable paths
 - `tools/retro.py`: older standalone RetroArch locker with hardcoded values
 - `tools/plex.py`: older standalone Plex locker + INI sync with hardcoded values
@@ -86,6 +89,10 @@ Edit `crt_config.json`:
   "dolphin": {
     "path": "D:\\Dolphin-x64\\Dolphin.exe",
     "dir": "D:\\Dolphin-x64"
+  },
+  "pcsx2": {
+    "path": "D:\\Pcsx2\\pcsx2-qt.exe",
+    "dir": "D:\\Pcsx2"
   },
   "launcher_integration": {
     "enabled": true,
@@ -194,9 +201,12 @@ Global mode will:
 `..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_ppsspp_wrapper.bat`
 - set Dolphin emulator `ApplicationPath` to:
 `..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_dolphin_wrapper.bat`
+- set PCSX2 emulator `ApplicationPath` to:
+`..\CRT Unified Launcher\integrations\launchbox\wrapper\launchbox_pcsx2_wrapper.bat`
 - remove `-f` from RetroArch associated platform command lines
 - remove `--fullscreen` from PPSSPP associated platform command lines
 - remove `-C Dolphin.Display.Fullscreen=True` from Dolphin associated platform command lines
+- remove `-fullscreen` from PCSX2 associated platform command lines
 
 ## Calibration Tools
 

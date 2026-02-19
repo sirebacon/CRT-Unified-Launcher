@@ -24,6 +24,10 @@
     "path": "D:\\Dolphin-x64\\Dolphin.exe",
     "dir": "D:\\Dolphin-x64"
   },
+  "pcsx2": {
+    "path": "D:\\Pcsx2\\pcsx2-qt.exe",
+    "dir": "D:\\Pcsx2"
+  },
   "launcher_integration": {
     "enabled": true,
     "main_monitor_index": 1,
