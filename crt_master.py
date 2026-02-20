@@ -7,6 +7,8 @@ from launchbox_session_mode import apply_crt_session_mode, restore_session_mode
 
 LAUNCHBOX_EXE = r"D:\Emulators\LaunchBox\LaunchBox.exe"
 LAUNCHBOX_DIR = r"D:\Emulators\LaunchBox"
+GENERIC_LAUNCHER = "launch_generic.py"
+RETROARCH_SESSION_PROFILE = os.path.join("profiles", "retroarch-session.json")
 
 
 def stop_plex_lockers() -> None:
@@ -52,6 +54,29 @@ def run_plex_mode() -> None:
         force_restore_plex()
 
 
+def run_retroarch_mode() -> None:
+    if not os.path.exists(GENERIC_LAUNCHER):
+        print(f"Session launcher not found: {GENERIC_LAUNCHER}")
+        input("Press Enter to return to menu...")
+        return
+    if not os.path.exists(RETROARCH_SESSION_PROFILE):
+        print(f"RetroArch session profile not found: {RETROARCH_SESSION_PROFILE}")
+        input("Press Enter to return to menu...")
+        return
+
+    try:
+        subprocess.run(
+            [
+                sys.executable,
+                GENERIC_LAUNCHER,
+                "--profile-file",
+                RETROARCH_SESSION_PROFILE,
+            ]
+        )
+    except KeyboardInterrupt:
+        pass
+
+
 def main():
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -68,7 +93,7 @@ def main():
         try:
             choice = input("\nSelect an option (1-5): ")
             if choice == '1':
-                subprocess.run([sys.executable, "launch_ra.py"])
+                run_retroarch_mode()
             elif choice == '2':
                 ok, msg, backup_dir = apply_crt_session_mode()
                 if not ok:
