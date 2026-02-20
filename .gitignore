@@ -1,2 +1,15 @@
 .codex/
 AI_GIT_ACCESS.md
+
+# Python cache artifacts
+__pycache__/
+*.py[cod]
+
+# Session/runtime state files
+runtime/
+.session.lock
+wrapper_stop_enforce.flag
+
+# Local debug/log outputs
+*_debug.log
+*.log
