@@ -52,6 +52,8 @@ pip install pywin32 keyboard pygetwindow psutil
 - `integrations/launchbox/wrapper/launchbox_dolphin_wrapper.bat`: LaunchBox entry point for Dolphin wrapper
 - `integrations/launchbox/wrapper/launchbox_pcsx2_wrapper.py`: wrapper for stable LaunchBox PCSX2 startup behavior
 - `integrations/launchbox/wrapper/launchbox_pcsx2_wrapper.bat`: LaunchBox entry point for PCSX2 wrapper
+- `integrations/launchbox/wrapper/launchbox_generic_wrapper.py`: configurable generic wrapper for LaunchBox emulators
+- `integrations/launchbox/wrapper/GENERIC_WRAPPER.md`: full generic wrapper behavior and usage guide
 - `scripts/install_launchbox_wrapper.py`: backup + patch helper to wire LaunchBox RetroArch/PPSSPP/Dolphin/PCSX2 to wrappers
 - `crt_config.json`: shared coordinates + executable paths
 - `tools/retro.py`: older standalone RetroArch locker with hardcoded values
