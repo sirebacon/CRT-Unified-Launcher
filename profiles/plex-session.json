@@ -1,0 +1,15 @@
+{
+  "profile_version": 1,
+  "path": "C:\\Program Files\\Plex\\Plex\\Plex.exe",
+  "dir": "C:\\Program Files\\Plex\\Plex",
+  "process_name": ["plex.exe"],
+  "class_contains": ["qt642qwindowicon"],
+  "x": -1883,
+  "y": 130,
+  "w": 1720,
+  "h": 1184,
+  "dpi_aware": true,
+  "strip_caption": true,
+  "match_any_pid": true,
+  "poll_slow": 1.0
+}

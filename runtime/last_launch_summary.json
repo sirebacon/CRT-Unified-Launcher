@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-02-19T21:43:22.134969",
+  "slug": "retroarch-launchbox",
+  "mode": "profile",
+  "profile_file": "integrations\\launchbox\\wrapper\\profiles\\retroarch-launchbox.json",
+  "config_key": null,
+  "exe": "D:\\Emulators\\RetroArch-Win64\\retroarch.exe",
+  "rect": {
+    "x": -1211,
+    "y": 43,
+    "w": 1057,
+    "h": 835
+  },
+  "position_only": false,
+  "exit_code": 0,
+  "duration_seconds": 125.3
+}

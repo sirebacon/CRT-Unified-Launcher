@@ -1,0 +1,22 @@
+{
+  "profile_version": 1,
+
+  "_notes": [
+    "RetroArch profile for LaunchBox generic wrapper mode.",
+    "This mirrors launchbox_retroarch_wrapper.py behavior as closely as possible.",
+    "If LaunchBox already passes --config/-c/--appendconfig, remove the arg_pre config pair here."
+  ],
+
+  "path": "D:\\Emulators\\RetroArch-Win64\\retroarch.exe",
+  "dir": "D:\\Emulators\\RetroArch-Win64",
+
+  "process_name": ["retroarch.exe"],
+  "class_contains": ["retroarch"],
+
+  "arg_pre": ["--config", "D:\\Emulators\\RetroArch-Win64\\retroarch_crt.cfg"],
+
+  "max_lock_seconds": 15.0,
+  "fast_seconds": 10.0,
+  "poll_fast": 0.1,
+  "poll_slow": 0.5
+}

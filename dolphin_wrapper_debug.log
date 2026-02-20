@@ -1,0 +1,39 @@
+[2026-02-19 17:58:59.032] Launch args: ['D:\\Emulators\\Dolphin-x64\\Dolphin.exe', '-C', 'Dolphin.Display.Fullscreen=False', '-b', '-C', 'Dolphin.Interface.ConfirmStop=False', '-e', 'X:\\Nintendo - GameCube\\1080 Avalanche (E).iso']
+[2026-02-19 17:58:59.033] Target rect: x=-1931, y=0, w=1733, h=1323
+[2026-02-19 17:58:59.035] Primary rect: x=100, y=100, w=1280, h=720
+[2026-02-19 17:58:59.044] Spawned Dolphin PID: 18372
+[2026-02-19 17:58:59.865] Tracking HWND: 6818512
+[2026-02-19 17:58:59.870] Current rect: x=67, y=67, w=854, h=481
+[2026-02-19 17:58:59.870] Applying target rect (pulse=True): x=-1931, y=0, w=1733, h=1323
+[2026-02-19 17:59:00.264] Current rect: x=-1931, y=0, w=1733, h=1323
+[2026-02-19 17:59:21.964] Current rect: x=-1287, y=456, w=1294, h=463
+[2026-02-19 17:59:21.967] Applying target rect (pulse=False): x=-1931, y=0, w=1733, h=1323
+[2026-02-19 17:59:22.371] Current rect: x=-1931, y=0, w=1733, h=1323
+[2026-02-19 17:59:24.780] Current rect: x=-1287, y=456, w=1294, h=463
+[2026-02-19 17:59:24.782] Applying target rect (pulse=False): x=-1931, y=0, w=1733, h=1323
+[2026-02-19 17:59:25.187] Current rect: x=-1931, y=0, w=1733, h=1323
+[2026-02-19 17:59:30.802] Current rect: x=-1931, y=0, w=1247, h=1323
+[2026-02-19 17:59:30.807] Applying target rect (pulse=False): x=-1931, y=0, w=1733, h=1323
+[2026-02-19 17:59:31.211] Current rect: x=-1931, y=0, w=1126, h=1323
+[2026-02-19 17:59:31.213] Applying target rect (pulse=False): x=-1931, y=0, w=1733, h=1323
+[2026-02-19 17:59:31.618] Current rect: x=-1931, y=0, w=1733, h=1323
+[2026-02-19 17:59:55.278] Stop flag detected; disabling enforcement.
+[2026-02-19 18:00:00.884] Dolphin process exited with code: 0
+[2026-02-19 18:03:24.004] Launch args: ['D:\\Emulators\\Dolphin-x64\\Dolphin.exe', '-C', 'Dolphin.Display.Fullscreen=False', '-b', '-C', 'Dolphin.Interface.ConfirmStop=False', '-e', 'X:\\Nintendo - GameCube\\1080 Avalanche (E).iso']
+[2026-02-19 18:03:24.004] Target rect: x=-1211, y=43, w=1057, h=835
+[2026-02-19 18:03:24.005] Primary rect: x=100, y=100, w=1280, h=720
+[2026-02-19 18:03:24.010] Spawned Dolphin PID: 30828
+[2026-02-19 18:03:24.718] Tracking HWND: 8720326
+[2026-02-19 18:03:24.718] Current rect: x=67, y=67, w=854, h=481
+[2026-02-19 18:03:24.719] Applying target rect (pulse=True): x=-1211, y=43, w=1057, h=835
+[2026-02-19 18:03:25.091] Current rect: x=-1211, y=43, w=1057, h=835
+[2026-02-19 18:03:51.322] Stop flag detected; disabling enforcement.
+[2026-02-19 18:03:53.726] Dolphin process exited with code: 0
+[2026-02-19 18:04:56.107] Launch args: ['D:\\Emulators\\Dolphin-x64\\Dolphin.exe', '-C', 'Dolphin.Display.Fullscreen=False', '-b', '-C', 'Dolphin.Interface.ConfirmStop=False', '-e', 'X:\\Nintendo - GameCube\\1080 Avalanche (E).iso']
+[2026-02-19 18:04:56.108] Target rect: x=-1211, y=43, w=1060, h=835
+[2026-02-19 18:04:56.108] Primary rect: x=100, y=100, w=1280, h=720
+[2026-02-19 18:04:56.113] Spawned Dolphin PID: 8656
+[2026-02-19 18:04:56.822] Tracking HWND: 23531146
+[2026-02-19 18:04:56.822] Current rect: x=67, y=67, w=854, h=481
+[2026-02-19 18:04:56.823] Applying target rect (pulse=True): x=-1211, y=43, w=1060, h=835
+[2026-02-19 18:04:57.213] Current rect: x=-1211, y=43, w=1060, h=835

@@ -10,6 +10,7 @@ Usage:
     python launch_generic.py --profile-file profiles/retroarch-session.json --debug
 """
 import argparse
+import ctypes
 import json
 import os
 import subprocess
@@ -30,6 +31,27 @@ except Exception:
 Rect = Tuple[int, int, int, int]
 PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "crt_config.json")
+
+
+def _apply_dpi_awareness(profile_path: str) -> None:
+    """Read dpi_aware from the profile and set process DPI awareness if requested.
+
+    Must be called before any window API call. Reads only the dpi_aware key so
+    the full profile load can happen normally afterward.
+    """
+    try:
+        with open(profile_path, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        if data.get("dpi_aware"):
+            try:
+                ctypes.windll.shcore.SetProcessDpiAwareness(1)
+            except Exception:
+                try:
+                    ctypes.windll.user32.SetProcessDPIAware()
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 def parse_args() -> argparse.Namespace:
@@ -70,18 +92,19 @@ def primary_rect(cfg: dict) -> Rect:
     return (int(p["x"]), int(p["y"]), int(p["w"]), int(p["h"]))
 
 
-def find_existing_pid(process_names: List[str]) -> Optional[int]:
-    """Return the PID of the first running process matching any name in the list."""
+def find_existing_pids(process_names: List[str]) -> List[int]:
+    """Return running PIDs matching any process name in the list."""
     if psutil is None:
-        return None
+        return []
     target = {n.lower() for n in process_names}
+    pids: List[int] = []
     for proc in psutil.process_iter(["name", "pid"]):
         try:
             if proc.info["name"].lower() in target:
-                return proc.info["pid"]
+                pids.append(proc.info["pid"])
         except Exception:
             continue
-    return None
+    return pids
 
 
 def pids_for_root(root_pid: int) -> Set[int]:
@@ -112,8 +135,13 @@ def get_rect(hwnd: int) -> Rect:
     return l, t, r - l, b - t
 
 
-def find_window(pid: int, class_contains: List[str], title_contains: List[str]) -> Optional[int]:
-    pids = pids_for_root(pid)
+def find_window(
+    pid: Optional[int],
+    class_contains: List[str],
+    title_contains: List[str],
+    match_any_pid: bool = False,
+) -> Optional[int]:
+    pids = pids_for_root(pid) if (pid is not None and not match_any_pid) else None
     class_filters = [x.lower() for x in class_contains if x]
     title_filters = [x.lower() for x in title_contains if x]
     best, best_area = None, -1
@@ -121,9 +149,10 @@ def find_window(pid: int, class_contains: List[str], title_contains: List[str]) 
         try:
             if not win32gui.IsWindowVisible(hwnd) or win32gui.IsIconic(hwnd):
                 continue
-            _, win_pid = win32process.GetWindowThreadProcessId(hwnd)
-            if win_pid not in pids:
-                continue
+            if pids is not None:
+                _, win_pid = win32process.GetWindowThreadProcessId(hwnd)
+                if win_pid not in pids:
+                    continue
             cls = win32gui.GetClassName(hwnd).lower()
             title = win32gui.GetWindowText(hwnd).lower()
             if class_filters and not any(f in cls for f in class_filters):
@@ -139,8 +168,21 @@ def find_window(pid: int, class_contains: List[str], title_contains: List[str]) 
     return best
 
 
-def move_window(hwnd: int, x: int, y: int, w: int, h: int) -> None:
-    win32gui.SetWindowPos(hwnd, win32con.HWND_TOP, x, y, w, h, win32con.SWP_SHOWWINDOW)
+def move_window(hwnd: int, x: int, y: int, w: int, h: int, strip_caption: bool = False) -> None:
+    try:
+        if win32gui.IsZoomed(hwnd):
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+    except Exception:
+        pass
+    if strip_caption:
+        try:
+            style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
+            if style & win32con.WS_CAPTION:
+                win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, style & ~win32con.WS_CAPTION)
+        except Exception:
+            pass
+    flags = win32con.SWP_SHOWWINDOW | win32con.SWP_FRAMECHANGED
+    win32gui.SetWindowPos(hwnd, win32con.HWND_TOP, x, y, w, h, flags)
 
 
 def dbg(enabled: bool, msg: str) -> None:
@@ -150,6 +192,7 @@ def dbg(enabled: bool, msg: str) -> None:
 
 def main() -> int:
     args = parse_args()
+    _apply_dpi_awareness(args.profile_file)
 
     try:
         cfg = load_config()
@@ -167,13 +210,21 @@ def main() -> int:
     class_contains: List[str] = profile.get("class_contains", [])
     title_contains: List[str] = profile.get("title_contains", [])
     poll = float(profile.get("poll_slow", 0.4))
+    strip_caption: bool = bool(profile.get("strip_caption", False))
+    match_any_pid: bool = bool(profile.get("match_any_pid", False))
 
     # Attach to existing process or launch a new one.
     pid: Optional[int] = None
     proc = None
 
     if process_names:
-        pid = find_existing_pid(process_names)
+        candidate_pids = find_existing_pids(process_names)
+        for cand_pid in candidate_pids:
+            if find_window(cand_pid, class_contains, title_contains):
+                pid = cand_pid
+                break
+        if pid is None and candidate_pids:
+            pid = candidate_pids[0]
 
     if pid:
         print(f"[{slug}] Found running process (PID {pid}) — attaching.")
@@ -189,7 +240,7 @@ def main() -> int:
         print(f"[{slug}] Waiting for window...", end="", flush=True)
         for _ in range(40):
             time.sleep(0.5)
-            if find_window(pid, class_contains, title_contains):
+            if find_window(pid, class_contains, title_contains, match_any_pid):
                 break
             print(".", end="", flush=True)
         print()
@@ -205,7 +256,7 @@ def main() -> int:
                 print(f"\n[{slug}] Process exited (code {proc.returncode}).")
                 break
 
-            hwnd = find_window(pid, class_contains, title_contains)
+            hwnd = find_window(pid, class_contains, title_contains, match_any_pid)
             if hwnd:
                 if hwnd != last_hwnd:
                     dbg(args.debug, f"Tracking HWND {hwnd}")
@@ -214,17 +265,19 @@ def main() -> int:
                     curr = get_rect(hwnd)
                     if curr != (x, y, w, h):
                         dbg(args.debug, f"Snap {curr} -> ({x},{y},{w},{h})")
-                        move_window(hwnd, x, y, w, h)
+                        move_window(hwnd, x, y, w, h, strip_caption)
                 except Exception:
                     pass
+            elif args.debug:
+                dbg(args.debug, "No matching window found for attached PID yet.")
 
             time.sleep(poll)
 
     except KeyboardInterrupt:
         print(f"\n[{slug}] Ctrl+C — restoring to primary monitor...")
-        hwnd = find_window(pid, class_contains, title_contains)
+        hwnd = find_window(pid, class_contains, title_contains, match_any_pid)
         if hwnd:
-            move_window(hwnd, px, py, pw, ph)
+            move_window(hwnd, px, py, pw, ph, strip_caption=False)
             try:
                 win32gui.SetForegroundWindow(hwnd)
             except Exception:

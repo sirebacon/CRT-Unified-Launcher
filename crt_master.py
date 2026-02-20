@@ -34,26 +34,6 @@ def force_restore_plex() -> None:
     )
 
 
-def run_plex_mode() -> None:
-    # Clean up any stale locker process before starting a fresh session.
-    stop_plex_lockers()
-
-    plex_proc = subprocess.Popen([sys.executable, "launch_plex.py"])
-    try:
-        plex_proc.wait()
-    except KeyboardInterrupt:
-        print("\nStopping Plex locker and restoring to main screen...")
-    finally:
-        if plex_proc.poll() is None:
-            plex_proc.terminate()
-            try:
-                plex_proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                plex_proc.kill()
-        stop_plex_lockers()
-        force_restore_plex()
-
-
 def run_retroarch_mode() -> None:
     if not os.path.exists(GENERIC_LAUNCHER):
         print(f"Session launcher not found: {GENERIC_LAUNCHER}")
@@ -75,6 +55,25 @@ def run_retroarch_mode() -> None:
         )
     except KeyboardInterrupt:
         pass
+
+
+def run_plex_mode() -> None:
+    stop_plex_lockers()
+
+    plex_proc = subprocess.Popen([sys.executable, "launch_plex.py"])
+    try:
+        plex_proc.wait()
+    except KeyboardInterrupt:
+        print("\nStopping Plex locker and restoring to main screen...")
+    finally:
+        if plex_proc.poll() is None:
+            plex_proc.terminate()
+            try:
+                plex_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                plex_proc.kill()
+        stop_plex_lockers()
+        force_restore_plex()
 
 
 def main():
