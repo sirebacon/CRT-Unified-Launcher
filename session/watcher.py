@@ -1,15 +1,21 @@
 """Multi-target session window watcher.
 
 Holds the main poll loop for a gaming session.  Blocks until the primary
-process exits or the user presses Ctrl+C.
+process exits or the user ends the session.
 
-On shutdown (either path):
-  1. Move all tracked emulator windows back to the restore rect.
-  2. Sleep one poll cycle so wrapper scripts see the move before the flag.
-  3. Write wrapper_stop_enforce.flag to signal wrappers to stop enforcing CRT.
+Ctrl+C behaviour
+----------------
+Single Ctrl+C  — Soft stop: moves all active emulator windows back to the
+                 main screen and writes the stop flag so wrapper scripts
+                 disengage.  The session stays alive so the user can launch
+                 another game from BigBox.
 
-Config restore is performed by the caller (launch_session.py) after run()
-returns.
+Double Ctrl+C  — (within 5 seconds of the first) Full shutdown: moves all
+                 windows, writes stop flag, returns to caller for config
+                 restore.
+
+Session ends automatically when the primary process (LaunchBox / BigBox)
+is no longer running.
 
 Steam/GOG note: process matching is by process name only.  Games launched
 through Steam or GOG that run under a different process name will not be
@@ -33,6 +39,8 @@ from session.window_utils import (
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 STOP_FLAG = os.path.join(PROJECT_ROOT, "wrapper_stop_enforce.flag")
 
+_SOFT_STOP_WINDOW = 5.0  # seconds: second Ctrl+C within this window = full shutdown
+
 
 # ---------------------------------------------------------------------------
 # Internal types
@@ -50,6 +58,7 @@ class _WatchTarget:
     h: int
     poll_slow: float = 0.5
     last_hwnd: Optional[int] = None
+    paused: bool = False   # True while the emulator is intentionally on main screen
 
 
 # ---------------------------------------------------------------------------
@@ -86,6 +95,19 @@ def _find_window_for_target(target: _WatchTarget) -> Optional[int]:
 
 
 def _lock_target(target: _WatchTarget, debug: bool) -> None:
+    """Lock the target window to its CRT rect, unless the target is paused.
+
+    A paused target was intentionally moved to the main screen via soft stop.
+    It stays paused until its process exits (e.g. user closed the game), at
+    which point it is un-paused and ready to track the next game launch.
+    """
+    if target.paused:
+        if not find_existing_pids(target.process_names):
+            if debug:
+                print(f"  [watcher] {target.slug}: process ended — resuming watch.")
+            target.paused = False
+        return
+
     hwnd = _find_window_for_target(target)
     if not hwnd:
         return
@@ -106,13 +128,34 @@ def _lock_target(target: _WatchTarget, debug: bool) -> None:
         pass
 
 
+def _soft_stop_targets(
+    targets: List[_WatchTarget],
+    rx: int, ry: int, rw: int, rh: int,
+) -> None:
+    """Move active emulator windows to the main screen and mark them paused."""
+    moved_any = False
+    for target in targets:
+        if target.paused:
+            continue
+        hwnd = _find_window_for_target(target)
+        if hwnd:
+            try:
+                move_window(hwnd, rx, ry, rw, rh)
+                print(f"[watcher] {target.slug}: moved to main screen.")
+                moved_any = True
+            except Exception as exc:
+                print(f"[watcher] {target.slug}: could not move: {exc}")
+        target.paused = True
+        target.last_hwnd = None
+    if moved_any:
+        _write_stop_flag()
+
+
 def _restore_all_windows(
     targets: List[_WatchTarget],
-    rx: int,
-    ry: int,
-    rw: int,
-    rh: int,
+    rx: int, ry: int, rw: int, rh: int,
 ) -> None:
+    """Move all windows (paused or not) to the restore rect on full shutdown."""
     for target in targets:
         hwnd = _find_window_for_target(target)
         if hwnd:
@@ -120,7 +163,7 @@ def _restore_all_windows(
                 move_window(hwnd, rx, ry, rw, rh)
                 print(f"[watcher] {target.slug}: moved to primary rect.")
             except Exception as exc:
-                print(f"[watcher] {target.slug}: could not restore window: {exc}")
+                print(f"[watcher] {target.slug}: could not restore: {exc}")
 
 
 def _write_stop_flag() -> None:
@@ -137,20 +180,21 @@ def _write_stop_flag() -> None:
 # ---------------------------------------------------------------------------
 
 def run(
-    proc: subprocess.Popen,
+    proc: Optional[subprocess.Popen],
     primary_profile_path: str,
     watch_profile_paths: List[str],
     restore_rect: Tuple[int, int, int, int],
     poll_seconds: float = 0.5,
     debug: bool = False,
 ) -> None:
-    """Run the watcher loop until the primary process exits or Ctrl+C.
+    """Run the watcher loop until the primary process exits or full shutdown.
 
     Args:
-        proc:                  Popen handle for the primary (e.g. LaunchBox).
+        proc:                  Popen handle for the primary, or None in
+                               reattach mode (watcher finds it by process name).
         primary_profile_path:  Session profile JSON for the primary.
         watch_profile_paths:   Session profile JSONs for emulators to watch.
-        restore_rect:          (x, y, w, h) to move all windows to on shutdown.
+        restore_rect:          (x, y, w, h) to move windows to on shutdown.
         poll_seconds:          Seconds between poll iterations.
         debug:                 Print detailed window-tracking output.
     """
@@ -167,41 +211,64 @@ def run(
 
     rx, ry, rw, rh = restore_rect
 
-    # --- Signal handling: ignore second Ctrl+C during shutdown ---
+    # --- Signal handling ---
+    # Single Ctrl+C  → soft stop (emulators to main screen, session continues)
+    # Double Ctrl+C within _SOFT_STOP_WINDOW seconds → full shutdown
     _shutting_down = False
+    _soft_stop = False
+    _last_sigint_time = 0.0
 
     def _on_sigint(signum, frame):
-        nonlocal _shutting_down
-        if _shutting_down:
-            print("[watcher] Interrupt received during shutdown — ignoring.")
-            return
-        _shutting_down = True
+        nonlocal _shutting_down, _soft_stop, _last_sigint_time
+        now = time.time()
+        if _soft_stop and (now - _last_sigint_time) < _SOFT_STOP_WINDOW:
+            print("\n[watcher] Second Ctrl+C — ending session.")
+            _shutting_down = True
+        else:
+            _soft_stop = True
+        _last_sigint_time = now
 
     signal.signal(signal.SIGINT, _on_sigint)
 
     print(
-        f"[watcher] Active — {1 + len(watch_targets)} target(s). "
-        "Ctrl+C to stop."
+        f"[watcher] Active — {len(watch_targets)} emulator target(s). "
+        "Ctrl+C to move emulators to main screen. Ctrl+C twice to end session."
     )
 
     # --- Main poll loop ---
     try:
         while not _shutting_down:
-            if proc.poll() is not None:
-                print(f"[watcher] Primary exited (code {proc.returncode}).")
-                _shutting_down = True
-                break
+            # Primary exit detection.
+            spawned_exited = proc is None or proc.poll() is not None
+            if spawned_exited:
+                if not find_existing_pids(primary.process_names):
+                    if proc is not None:
+                        print(f"[watcher] Primary exited (code {proc.returncode}).")
+                    else:
+                        print("[watcher] Primary process no longer running.")
+                    _shutting_down = True
+                    break
+                elif debug and proc is not None and proc.poll() is not None:
+                    print("[watcher] Spawned process exited — matching process still alive, continuing.")
 
-            _lock_target(primary, debug)
+            # Soft stop: move active emulators to main screen, keep session alive.
+            if _soft_stop and not _shutting_down:
+                print("[watcher] Ctrl+C — moving emulators to main screen.")
+                print(f"[watcher] Session still active. Ctrl+C again within "
+                      f"{_SOFT_STOP_WINDOW:.0f}s to end session.")
+                _soft_stop_targets(watch_targets, rx, ry, rw, rh)
+                _soft_stop = False
+
+            # Lock emulator windows to CRT.
             for target in watch_targets:
                 _lock_target(target, debug)
 
             time.sleep(poll_seconds)
+
     except KeyboardInterrupt:
-        # Fallback if signal handler wasn't reached.
         _shutting_down = True
 
-    # --- Shutdown sequence (Ctrl+C ignored from here on) ---
+    # --- Full shutdown sequence ---
     print("[watcher] Shutting down...")
     signal.signal(
         signal.SIGINT,
@@ -213,6 +280,6 @@ def run(
         time.sleep(poll_seconds)
         _write_stop_flag()
     except Exception as exc:
-        print(f"[watcher] Error during shutdown sequence: {exc}")
+        print(f"[watcher] Error during shutdown: {exc}")
 
     print("[watcher] Done.")

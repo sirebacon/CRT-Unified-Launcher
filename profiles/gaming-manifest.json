@@ -82,7 +82,7 @@
       "type": "launchbox_settings",
       "bigbox_path": "D:\\Emulators\\LaunchBox\\Data\\BigBoxSettings.xml",
       "settings_path": "D:\\Emulators\\LaunchBox\\Data\\Settings.xml",
-      "monitor_index": 1,
+      "monitor_index": 0,
       "disable_splash_screens": true
     }
   ]

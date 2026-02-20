@@ -158,10 +158,9 @@ def main() -> int:
         print(f"[session] Primary executable not found: {exe}")
         return 1
 
-    if _is_running(primary_process_names):
-        print(f"[session] Primary is already running: {primary_process_names}")
-        print("[session] Close it before starting a session.")
-        return 1
+    reattach = _is_running(primary_process_names)
+    if reattach:
+        print("[session] Primary already running — will reattach watcher after patching.")
 
     patch_paths = _collect_patch_paths(manifest.patches)
     locked = _check_locked_files(patch_paths)
@@ -194,10 +193,13 @@ def main() -> int:
 
         print("[session] Patches applied.")
 
-        # --- Launch primary ---
-        print(f"[session] Launching primary: {exe}")
-        proc = subprocess.Popen([exe], cwd=cwd if cwd else None)
-        print(f"[session] Primary PID: {proc.pid}")
+        if not reattach:
+            # --- Launch primary ---
+            print(f"[session] Launching primary: {exe}")
+            proc = subprocess.Popen([exe], cwd=cwd if cwd else None)
+            print(f"[session] Primary PID: {proc.pid}")
+        else:
+            print("[session] Reattaching to running primary (no launch).")
 
         # --- Run watcher ---
         restore_rect = _restore_rect(cfg)

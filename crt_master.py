@@ -76,6 +76,7 @@ def run_gaming_session() -> None:
                 SESSION_LAUNCHER,
                 "--manifest",
                 GAMING_MANIFEST,
+                "--debug",
             ]
         )
     except KeyboardInterrupt:
@@ -146,6 +147,7 @@ def main():
                         input("Press Enter to continue...")
             elif choice == '3':
                 run_gaming_session()
+                input("\nPress Enter to return to menu...")
             elif choice == '4':
                 run_plex_mode()
             elif choice == '5':
