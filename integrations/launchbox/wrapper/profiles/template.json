@@ -1,0 +1,19 @@
+{
+  "profile_version": 1,
+
+  "path": "C:\\path\\to\\game.exe",
+  "dir": "C:\\path\\to",
+
+  "process_name": ["game.exe"],
+
+  "class_contains": [],
+  "title_contains": [],
+
+  "arg_pre": [],
+  "set_values": [],
+
+  "max_lock_seconds": 120.0,
+  "fast_seconds": 8.0,
+  "poll_fast": 0.1,
+  "poll_slow": 0.4
+}

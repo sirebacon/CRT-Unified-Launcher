@@ -1,0 +1,8 @@
+{
+  "_notes": "Shared timing defaults for all profiles. Any key here can be overridden per-profile.",
+
+  "max_lock_seconds": 120.0,
+  "fast_seconds": 8.0,
+  "poll_fast": 0.1,
+  "poll_slow": 0.4
+}

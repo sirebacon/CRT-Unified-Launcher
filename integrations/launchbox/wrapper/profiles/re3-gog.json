@@ -1,0 +1,13 @@
+{
+  "profile_version": 1,
+
+  "_window_sequence": [
+    "1. CONFIGURATION  (config menu, appears first)",
+    "2. RESIDENT EVIL \u2122 3 NEMISIS PC  (gameplay window)"
+  ],
+
+  "path": "D:\\GOG Galaxy\\Games\\Resident Evil 3\\bio3 Uncensored.EXE",
+  "dir": "D:\\GOG Galaxy\\Games\\Resident Evil 3",
+
+  "process_name": ["bio3 uncensored.exe"]
+}

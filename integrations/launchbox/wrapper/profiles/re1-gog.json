@@ -1,0 +1,17 @@
+{
+  "profile_version": 1,
+
+  "_window_sequence": [
+    "1. CONFIGURATION  (config menu, appears first)",
+    "2. MOD SELECTION  (mod picker, appears second)",
+    "3. RESIDENT EVIL \u00ae PC  (gameplay window)"
+  ],
+
+  "path": "D:\\GOG Galaxy\\Games\\Resident Evil\\Biohazard.exe",
+  "dir": "D:\\GOG Galaxy\\Games\\Resident Evil",
+
+  "process_name": ["biohazard.exe"],
+
+  "position_only": true,
+  "max_lock_seconds": 120.0
+}

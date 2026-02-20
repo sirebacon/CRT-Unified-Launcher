@@ -19,3 +19,4 @@ This folder contains the current, modularized documentation for CRT Unified Laun
 
 - `docs/roadmaps/generic-wrapper-scaling-todo.md`: scaling roadmap for profile-based wrapper config
 - `docs/runbooks/ai-git-access.md`: repo-local Git/SSH runbook for AI sessions
+- `docs/runbooks/re-gog-crt-display.md`: RE1/RE2/RE3 GOG — CRT display investigation and known limitations

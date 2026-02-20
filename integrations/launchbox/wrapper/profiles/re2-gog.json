@@ -1,0 +1,13 @@
+{
+  "profile_version": 1,
+
+  "_window_sequence": [
+    "1. CONFIGURATION  (config menu, appears first)",
+    "2. RESIDENT EVIL 2 \u00ae PC  (gameplay window)"
+  ],
+
+  "path": "D:\\GOG Galaxy\\Games\\Resident Evil 2\\Resident Evil 2.exe",
+  "dir": "D:\\GOG Galaxy\\Games\\Resident Evil 2",
+
+  "process_name": ["resident evil 2.exe"]
+}
