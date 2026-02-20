@@ -34,7 +34,7 @@ launch_session.py
 ### Ctrl+C Behaviour
 
 - **Single Ctrl+C**: soft stop — moves all active emulator windows to the main screen and pauses tracking. Session stays alive; BigBox remains open for the next game launch.
-- **Second Ctrl+C within 5 seconds**: full shutdown — ends watcher, restores all configs.
+- **Second Ctrl+C within 8 seconds**: full shutdown — ends watcher, restores all configs.
 - A paused emulator auto-resumes tracking when its process exits (game closed).
 
 ### Data Files
@@ -90,3 +90,4 @@ See `docs/launchbox/generic-wrapper.md` for full CLI reference.
 - `session/window_utils.py` — all Win32 window operations used across the codebase
 - `crt_config.json` — global coordinates, executable paths, polling cadence, restore rect
 - `wrapper_stop_enforce.flag` — written by session watcher on soft stop or shutdown to signal wrapper scripts to disengage
+

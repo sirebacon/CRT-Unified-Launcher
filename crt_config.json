@@ -1,9 +1,6 @@
 {
   "retroarch": {
-    "x": -1211,
-    "y": 43,
-    "w": 1057,
-    "h": 835,
+    "_note": "rect (x/y/w/h) is read from profiles/retroarch-session.json — edit there",
     "path": "D:\\Emulators\\RetroArch-Win64\\retroarch.exe",
     "dir": "D:\\Emulators\\RetroArch-Win64",
     "launchbox_config": "D:\\Emulators\\RetroArch-Win64\\retroarch_crt.cfg"

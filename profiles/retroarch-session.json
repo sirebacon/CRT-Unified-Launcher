@@ -4,7 +4,7 @@
   "dir": "D:\\Emulators\\RetroArch-Win64",
   "process_name": ["retroarch.exe"],
   "class_contains": ["sdl_app", "retroarch"],
-  "x": -1211,
+  "x": -1221,
   "y": 43,
   "w": 1057,
   "h": 835,

@@ -13,11 +13,21 @@ import win32process
 Rect = Tuple[int, int, int, int]
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "crt_config.json")
+SESSION_PROFILE_PATH = os.path.join(PROJECT_ROOT, "profiles", "retroarch-session.json")
 
 
 def load_config() -> dict:
     with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
-        return json.load(f)["retroarch"]
+        cfg = json.load(f)["retroarch"]
+    # Rect comes from retroarch-session.json so there is a single source of truth
+    # shared with the session watcher. Executable/dir/config remain in crt_config.json.
+    with open(SESSION_PROFILE_PATH, "r", encoding="utf-8-sig") as f:
+        profile = json.load(f)
+    cfg["x"] = profile["x"]
+    cfg["y"] = profile["y"]
+    cfg["w"] = profile["w"]
+    cfg["h"] = profile["h"]
+    return cfg
 
 
 def has_config_arg(argv) -> bool:

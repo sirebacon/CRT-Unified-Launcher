@@ -10,7 +10,7 @@ Single Ctrl+C  — Soft stop: moves all active emulator windows back to the
                  disengage.  The session stays alive so the user can launch
                  another game from BigBox.
 
-Double Ctrl+C  — (within 5 seconds of the first) Full shutdown: moves all
+Double Ctrl+C  — (within 8 seconds of the first) Full shutdown: moves all
                  windows, writes stop flag, returns to caller for config
                  restore.
 
@@ -39,7 +39,7 @@ from session.window_utils import (
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 STOP_FLAG = os.path.join(PROJECT_ROOT, "wrapper_stop_enforce.flag")
 
-_SOFT_STOP_WINDOW = 5.0  # seconds: second Ctrl+C within this window = full shutdown
+_SOFT_STOP_WINDOW = 8.0  # seconds: second Ctrl+C within this window = full shutdown
 
 
 # ---------------------------------------------------------------------------
@@ -215,8 +215,12 @@ def run(
     # Single Ctrl+C  → soft stop (emulators to main screen, session continues)
     # Double Ctrl+C within _SOFT_STOP_WINDOW seconds → full shutdown
     _shutting_down = False
+    _return_to_menu = False   # True = quiet exit, skip window moves and stop flag
     _soft_stop = False
     _last_sigint_time = 0.0
+    _logged_spawned_exit = False
+    _last_heartbeat = time.time()
+    _HEARTBEAT_INTERVAL = 60.0  # seconds between "still active" messages
 
     def _on_sigint(signum, frame):
         nonlocal _shutting_down, _soft_stop, _last_sigint_time
@@ -248,11 +252,19 @@ def run(
                         print("[watcher] Primary process no longer running.")
                     _shutting_down = True
                     break
-                elif debug and proc is not None and proc.poll() is not None:
+                elif debug and proc is not None and proc.poll() is not None and not _logged_spawned_exit:
                     print("[watcher] Spawned process exited — matching process still alive, continuing.")
+                    _logged_spawned_exit = True
 
             # Soft stop: move active emulators to main screen, keep session alive.
+            # If no emulators are running at all, return to menu quietly.
             if _soft_stop and not _shutting_down:
+                any_running = any(find_existing_pids(t.process_names) for t in watch_targets)
+                if not any_running:
+                    print("\n[watcher] Ctrl+C — no emulators running, returning to menu.")
+                    _return_to_menu = True
+                    _shutting_down = True
+                    break
                 print("[watcher] Ctrl+C — moving emulators to main screen.")
                 print(f"[watcher] Session still active. Ctrl+C again within "
                       f"{_SOFT_STOP_WINDOW:.0f}s to end session.")
@@ -263,23 +275,35 @@ def run(
             for target in watch_targets:
                 _lock_target(target, debug)
 
+            # Periodic heartbeat so the terminal shows the session is still alive.
+            now = time.time()
+            if now - _last_heartbeat >= _HEARTBEAT_INTERVAL:
+                active = [t.slug for t in watch_targets if not t.paused]
+                print(f"[watcher] Session active — watching: {', '.join(active) if active else 'none'}")
+                _last_heartbeat = now
+
             time.sleep(poll_seconds)
 
     except KeyboardInterrupt:
         _shutting_down = True
 
-    # --- Full shutdown sequence ---
-    print("[watcher] Shutting down...")
+    # --- Shutdown sequence ---
     signal.signal(
         signal.SIGINT,
         lambda s, f: print("[watcher] Interrupt ignored — cleanup in progress."),
     )
 
-    try:
-        _restore_all_windows([primary] + watch_targets, rx, ry, rw, rh)
-        time.sleep(poll_seconds)
-        _write_stop_flag()
-    except Exception as exc:
-        print(f"[watcher] Error during shutdown: {exc}")
+    if _return_to_menu:
+        # Quiet exit: no emulators were running, nothing to move or signal.
+        # Configs are restored by the caller (launch_session.py).
+        print("[watcher] Session ended.")
+    else:
+        print("[watcher] Shutting down...")
+        try:
+            _restore_all_windows([primary] + watch_targets, rx, ry, rw, rh)
+            time.sleep(poll_seconds)
+            _write_stop_flag()
+        except Exception as exc:
+            print(f"[watcher] Error during shutdown: {exc}")
+        print("[watcher] Done.")
 
-    print("[watcher] Done.")

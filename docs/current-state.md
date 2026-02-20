@@ -61,7 +61,7 @@ Core objective: keep emulator windows on calibrated CRT coordinates and restore 
    - Emulator configs are patched automatically.
    - Any emulator launched from BigBox is moved to the CRT.
    - Ctrl+C once: moves emulators to main screen, session stays alive (swap games).
-   - Ctrl+C twice within 5 seconds: ends session and restores all configs.
+   - Ctrl+C twice within 8 seconds: ends session and restores all configs.
 3. If LaunchBox is already open, option 3 reattaches the watcher and still patches emulator configs.
 
 ## Known Gaps
@@ -69,3 +69,4 @@ Core objective: keep emulator windows on calibrated CRT coordinates and restore 
 - Steam/GOG games that run under a different process name than what is in their watch profile are not tracked. This is an accepted limitation for v1.
 - Two instances of the same emulator: only the first (by PID order) is tracked. The second floats uncontrolled.
 - `launchbox_settings` patches (BigBoxSettings.xml, Settings.xml) have no effect in reattach mode since LaunchBox already loaded them at startup.
+

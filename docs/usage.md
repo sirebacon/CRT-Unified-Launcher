@@ -38,7 +38,7 @@ If LaunchBox/BigBox is already open, option 3 reattaches the watcher. Emulator c
 ### Ctrl+C behaviour
 
 - **Single Ctrl+C** — soft stop: moves all emulator windows back to the main screen and pauses tracking. Session stays alive. BigBox remains open so you can launch another game.
-- **Second Ctrl+C within 5 seconds** — full shutdown: ends the session, restores all configs.
+- **Second Ctrl+C within 8 seconds** — full shutdown: ends the session, restores all configs.
 
 When you close an emulator (quit a game) after a soft stop, tracking for that emulator automatically resumes for the next launch.
 
@@ -51,6 +51,9 @@ python validate_session.py --manifest profiles/gaming-manifest.json
 ```
 
 This backs up, patches, and immediately restores — no permanent changes.
+
+For updating/tuning already-profiled apps, see `docs/configuration.md` section:
+- `Updating Already Profiled Applications`
 
 ---
 
@@ -91,3 +94,4 @@ Plex live calibration:
 ```powershell
 python tools\plex_callibrate.py
 ```
+
