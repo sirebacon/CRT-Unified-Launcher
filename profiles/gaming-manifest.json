@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+
+  "primary": {
+    "profile": "profiles/launchbox-session.json"
+  },
+
+  "watch": [
+    { "profile": "profiles/retroarch-session.json" },
+    { "profile": "profiles/dolphin-session.json" },
+    { "profile": "profiles/ppsspp-session.json" },
+    { "profile": "profiles/pcsx2-session.json" }
+  ],
+
+  "patches": [
+    {
+      "type": "retroarch_cfg",
+      "path": "D:\\Emulators\\RetroArch-Win64\\retroarch.cfg",
+      "set_values": {
+        "video_fullscreen": "false",
+        "video_windowed_fullscreen": "false",
+        "video_window_show_decorations": "false",
+        "video_force_aspect": "false",
+        "video_scale_integer": "false",
+        "custom_viewport_width": "0",
+        "custom_viewport_height": "0",
+        "custom_viewport_x": "0",
+        "custom_viewport_y": "0",
+        "video_aspect_ratio_auto": "false",
+        "video_aspect_ratio": "1.265868"
+      }
+    },
+
+    {
+      "type": "launchbox_emulator",
+      "path": "D:\\Emulators\\LaunchBox\\Data\\Emulators.xml",
+      "emulators": [
+        {
+          "title": "RetroArch",
+          "wrapper_bat": "D:\\Emulators\\CRT-Unified-Launcher\\integrations\\launchbox\\wrapper\\launchbox_retroarch_wrapper.bat",
+          "strip_args": ["-f"],
+          "xml_fields": {
+            "UseStartupScreen": "false",
+            "StartupLoadDelay": "0",
+            "HideMouseCursorInGame": "false"
+          }
+        },
+        {
+          "title": "PPSSPP",
+          "wrapper_bat": "D:\\Emulators\\CRT-Unified-Launcher\\integrations\\launchbox\\wrapper\\launchbox_ppsspp_wrapper.bat",
+          "strip_args": ["--fullscreen"],
+          "xml_fields": {
+            "UseStartupScreen": "false",
+            "StartupLoadDelay": "0",
+            "HideMouseCursorInGame": "false"
+          }
+        },
+        {
+          "title": "Dolphin",
+          "wrapper_bat": "D:\\Emulators\\CRT-Unified-Launcher\\integrations\\launchbox\\wrapper\\launchbox_dolphin_wrapper.bat",
+          "strip_args": ["-C Dolphin.Display.Fullscreen=True"],
+          "xml_fields": {
+            "UseStartupScreen": "false",
+            "StartupLoadDelay": "0",
+            "HideMouseCursorInGame": "false"
+          }
+        },
+        {
+          "title": "PCSX2",
+          "wrapper_bat": "D:\\Emulators\\CRT-Unified-Launcher\\integrations\\launchbox\\wrapper\\launchbox_pcsx2_wrapper.bat",
+          "strip_args": ["-fullscreen"],
+          "xml_fields": {
+            "UseStartupScreen": "false",
+            "StartupLoadDelay": "0",
+            "HideMouseCursorInGame": "false"
+          }
+        }
+      ]
+    },
+
+    {
+      "type": "launchbox_settings",
+      "bigbox_path": "D:\\Emulators\\LaunchBox\\Data\\BigBoxSettings.xml",
+      "settings_path": "D:\\Emulators\\LaunchBox\\Data\\Settings.xml",
+      "monitor_index": 1,
+      "disable_splash_screens": true
+    }
+  ]
+}

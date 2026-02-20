@@ -16,19 +16,13 @@ import os
 import subprocess
 import sys
 import time
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional
 
-import win32con
 import win32gui
-import win32process
 
-try:
-    import psutil
-except Exception:
-    psutil = None
+from session.window_utils import Rect, find_existing_pids, find_window, get_rect, move_window
 
 
-Rect = Tuple[int, int, int, int]
 PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "crt_config.json")
 
@@ -90,99 +84,6 @@ def primary_rect(cfg: dict) -> Rect:
         "primary_on_exit", {"x": 100, "y": 100, "w": 1280, "h": 720}
     )
     return (int(p["x"]), int(p["y"]), int(p["w"]), int(p["h"]))
-
-
-def find_existing_pids(process_names: List[str]) -> List[int]:
-    """Return running PIDs matching any process name in the list."""
-    if psutil is None:
-        return []
-    target = {n.lower() for n in process_names}
-    pids: List[int] = []
-    for proc in psutil.process_iter(["name", "pid"]):
-        try:
-            if proc.info["name"].lower() in target:
-                pids.append(proc.info["pid"])
-        except Exception:
-            continue
-    return pids
-
-
-def pids_for_root(root_pid: int) -> Set[int]:
-    pids = {root_pid}
-    if psutil is None:
-        return pids
-    try:
-        for child in psutil.Process(root_pid).children(recursive=True):
-            pids.add(child.pid)
-    except Exception:
-        pass
-    return pids
-
-
-def enum_windows() -> List[int]:
-    hwnds: List[int] = []
-
-    def cb(hwnd, _):
-        hwnds.append(hwnd)
-        return True
-
-    win32gui.EnumWindows(cb, 0)
-    return hwnds
-
-
-def get_rect(hwnd: int) -> Rect:
-    l, t, r, b = win32gui.GetWindowRect(hwnd)
-    return l, t, r - l, b - t
-
-
-def find_window(
-    pid: Optional[int],
-    class_contains: List[str],
-    title_contains: List[str],
-    match_any_pid: bool = False,
-) -> Optional[int]:
-    pids = pids_for_root(pid) if (pid is not None and not match_any_pid) else None
-    class_filters = [x.lower() for x in class_contains if x]
-    title_filters = [x.lower() for x in title_contains if x]
-    best, best_area = None, -1
-    for hwnd in enum_windows():
-        try:
-            if not win32gui.IsWindowVisible(hwnd) or win32gui.IsIconic(hwnd):
-                continue
-            if pids is not None:
-                _, win_pid = win32process.GetWindowThreadProcessId(hwnd)
-                if win_pid not in pids:
-                    continue
-            cls = win32gui.GetClassName(hwnd).lower()
-            title = win32gui.GetWindowText(hwnd).lower()
-            if class_filters and not any(f in cls for f in class_filters):
-                continue
-            if title_filters and not any(f in title for f in title_filters):
-                continue
-            l, t, w, h = get_rect(hwnd)
-            area = w * h
-            if area > best_area:
-                best, best_area = hwnd, area
-        except Exception:
-            continue
-    return best
-
-
-def move_window(hwnd: int, x: int, y: int, w: int, h: int, strip_caption: bool = False) -> None:
-    try:
-        if win32gui.IsZoomed(hwnd):
-            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-    except Exception:
-        pass
-    if strip_caption:
-        try:
-            style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
-            if style & win32con.WS_CAPTION:
-                win32gui.SetWindowLong(hwnd, win32con.GWL_STYLE, style & ~win32con.WS_CAPTION)
-        except Exception:
-            pass
-    flags = win32con.SWP_SHOWWINDOW | win32con.SWP_FRAMECHANGED
-    win32gui.SetWindowPos(hwnd, win32con.HWND_TOP, x, y, w, h, flags)
 
 
 def dbg(enabled: bool, msg: str) -> None:

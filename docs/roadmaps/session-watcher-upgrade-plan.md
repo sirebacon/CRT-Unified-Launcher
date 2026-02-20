@@ -94,11 +94,15 @@ Example skeleton:
 
 1. Parent-process scope decision (Steam/GOG):
 - Either support parent-process fallback in option 3, or explicitly accept this as out-of-scope with documented impact.
+- **Decision (Phase 4):** Steam/GOG parent-process fallback is OUT OF SCOPE for option 3 v1. The watcher tracks processes by name from the watch profiles. Games launched through Steam or GOG launchers will not be tracked unless their process name appears in a watch profile. This is an accepted known gap — option 2 must not be retired until this gap is confirmed to not matter in practice or a later version resolves it.
 
-2. LaunchBox-running-at-start behavior:
+2. Lockfile location:
+- **Decision (Phase 4):** Lockfile path is `.session.lock` at the project root (same directory as `crt_master.py` and `launch_session.py`). This makes it easy to locate and delete manually after a hard crash. The file contains the PID of the running session process.
+
+3. LaunchBox-running-at-start behavior:
 - Refuse to start if LaunchBox is already running, with clear message.
 
-3. Locked-file behavior:
+4. Locked-file behavior:
 - Validate writability before applying patches.
 - Abort cleanly if any required target file is locked.
 

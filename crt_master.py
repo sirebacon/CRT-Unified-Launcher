@@ -1,4 +1,4 @@
-﻿import os
+import os
 import subprocess
 import sys
 
@@ -8,8 +8,9 @@ from launchbox_session_mode import apply_crt_session_mode, restore_session_mode
 LAUNCHBOX_EXE = r"D:\Emulators\LaunchBox\LaunchBox.exe"
 LAUNCHBOX_DIR = r"D:\Emulators\LaunchBox"
 GENERIC_LAUNCHER = "launch_generic.py"
+SESSION_LAUNCHER = "launch_session.py"
 RETROARCH_SESSION_PROFILE = os.path.join("profiles", "retroarch-session.json")
-LAUNCHBOX_SESSION_PROFILE = os.path.join("profiles", "launchbox-session.json")
+GAMING_MANIFEST = os.path.join("profiles", "gaming-manifest.json")
 
 
 def stop_plex_lockers() -> None:
@@ -58,13 +59,13 @@ def run_retroarch_mode() -> None:
         pass
 
 
-def run_launchbox_session_mode() -> None:
-    if not os.path.exists(GENERIC_LAUNCHER):
-        print(f"Session launcher not found: {GENERIC_LAUNCHER}")
+def run_gaming_session() -> None:
+    if not os.path.exists(SESSION_LAUNCHER):
+        print(f"Session launcher not found: {SESSION_LAUNCHER}")
         input("Press Enter to return to menu...")
         return
-    if not os.path.exists(LAUNCHBOX_SESSION_PROFILE):
-        print(f"LaunchBox session profile not found: {LAUNCHBOX_SESSION_PROFILE}")
+    if not os.path.exists(GAMING_MANIFEST):
+        print(f"Gaming manifest not found: {GAMING_MANIFEST}")
         input("Press Enter to return to menu...")
         return
 
@@ -72,9 +73,9 @@ def run_launchbox_session_mode() -> None:
         subprocess.run(
             [
                 sys.executable,
-                GENERIC_LAUNCHER,
-                "--profile-file",
-                LAUNCHBOX_SESSION_PROFILE,
+                SESSION_LAUNCHER,
+                "--manifest",
+                GAMING_MANIFEST,
             ]
         )
     except KeyboardInterrupt:
@@ -144,7 +145,7 @@ def main():
                         print(restore_msg)
                         input("Press Enter to continue...")
             elif choice == '3':
-                run_launchbox_session_mode()
+                run_gaming_session()
             elif choice == '4':
                 run_plex_mode()
             elif choice == '5':
