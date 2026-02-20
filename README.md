@@ -1,26 +1,6 @@
 # CRT Unified Launcher
 
-Windows-based launcher and window-lock system for RetroArch, Plex, and LaunchBox/BigBox CRT workflows.
-
-## Documentation
-
-The project documentation is now modularized under `docs/`.
-
-Start here:
-
-- `docs/README.md`
-- `docs/current-state.md`
-- `docs/setup-and-requirements.md`
-- `docs/configuration.md`
-- `docs/usage.md`
-- `docs/architecture.md`
-- `docs/launchbox/overview.md`
-- `docs/launchbox/generic-wrapper.md`
-
-Planning and runbooks:
-
-- `docs/roadmaps/generic-wrapper-scaling-todo.md`
-- `docs/runbooks/ai-git-access.md`
+Windows-based launcher and window-lock system for RetroArch, LaunchBox/BigBox, and Plex CRT workflows.
 
 ## Quick Start
 
@@ -30,8 +10,20 @@ Install dependencies:
 pip install pywin32 keyboard pygetwindow psutil
 ```
 
-Run launcher:
+Run the launcher:
 
 ```powershell
 python crt_master.py
 ```
+
+Pick **option 3** for a LaunchBox gaming session: patches emulator configs, opens LaunchBox on the main screen, and moves emulator windows to the CRT as you play. Ctrl+C to soft-stop (emulators back to main screen, session stays alive). Ctrl+C twice to end and restore everything.
+
+## Documentation
+
+- `docs/current-state.md` — what works, recommended workflow, known gaps
+- `docs/usage.md` — all menu options explained
+- `docs/configuration.md` — config files and session profiles
+- `docs/architecture.md` — component overview and session lifecycle
+- `docs/launchbox/overview.md` — LaunchBox integration model
+- `docs/launchbox/generic-wrapper.md` — per-game wrapper profiles and CLI reference
+- `docs/` — runbooks and other reference docs

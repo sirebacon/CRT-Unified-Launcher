@@ -1,22 +1,20 @@
 # Documentation
 
-This folder contains the current, modularized documentation for CRT Unified Launcher.
-
 ## Start Here
 
-- `docs/current-state.md`: current project state, scope, and known direction
-- `docs/setup-and-requirements.md`: environment and dependencies
-- `docs/configuration.md`: `crt_config.json` structure and tuning guidance
-- `docs/usage.md`: launcher workflows and day-to-day commands
-- `docs/architecture.md`: component responsibilities and runtime flow
+- `docs/current-state.md` — what is implemented, recommended workflow, known gaps
+- `docs/setup-and-requirements.md` — environment, dependencies, first-time setup
+- `docs/usage.md` — launcher menu options and day-to-day commands
+- `docs/configuration.md` — `crt_config.json`, session profiles, manifest structure
+- `docs/architecture.md` — component responsibilities and runtime flow
 
 ## LaunchBox
 
-- `docs/launchbox/overview.md`: LaunchBox/BigBox integration model
-- `docs/launchbox/generic-wrapper.md`: generic wrapper behavior, arguments, and examples
+- `docs/launchbox/overview.md` — LaunchBox/BigBox integration model
+- `docs/launchbox/generic-wrapper.md` — generic wrapper CLI, profile format, examples
 
-## Planning and Operations
+## Runbooks
 
-- `docs/roadmaps/generic-wrapper-scaling-todo.md`: scaling roadmap for profile-based wrapper config
-- `docs/runbooks/ai-git-access.md`: repo-local Git/SSH runbook for AI sessions
-- `docs/runbooks/re-gog-crt-display.md`: RE1/RE2/RE3 GOG — CRT display investigation and known limitations
+- `docs/runbooks/session-restore-recovery.md` — manual recovery if session config restore fails
+- `docs/runbooks/re-gog-crt-display.md` — RE1/RE2/RE3 GOG CRT display investigation and known limitations
+- `docs/runbooks/ai-git-access.md` — repo-local Git/SSH setup for AI sessions

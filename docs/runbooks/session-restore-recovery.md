@@ -16,7 +16,7 @@ When restore fails, the session tool should:
 - copy backup file to original target path
 - verify file contents match expected defaults
 3. Remove session lockfile if no session process is running:
-- expected path: `runtime/session.lock`
+- expected path: `.session.lock` (project root, next to `crt_master.py`)
 4. Remove stale stop flag if present:
 - `wrapper_stop_enforce.flag`
 

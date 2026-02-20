@@ -6,40 +6,66 @@ Last updated: 2026-02-20
 
 CRT Unified Launcher is a Windows-focused launcher and window-placement system for:
 
-- RetroArch gaming workflows
+- RetroArch standalone gaming
+- LaunchBox/BigBox multi-emulator gaming sessions
 - Plex cinema workflows
-- LaunchBox/BigBox game launch flows
 
-Core objective: keep target app windows on calibrated CRT coordinates and restore to primary monitor coordinates on stop/exit workflows.
+Core objective: keep emulator windows on calibrated CRT coordinates and restore everything to primary-monitor coordinates when the session ends.
 
 ## What Is Implemented
 
-- Unified launcher menu in `crt_master.py`
-- Per-app launchers:
-  - `launch_ra.py`
-  - `launch_plex.py`
-- LaunchBox support:
-  - watcher-based flow in `launchbox_crt_watcher.py`
-  - session patch flow in `launchbox_session_mode.py`
-  - per-emulator wrappers under `integrations/launchbox/wrapper/`
-  - configurable generic wrapper in `integrations/launchbox/wrapper/launchbox_generic_wrapper.py`
-- Shared config in `crt_config.json`
-- Installer/patch helper for LaunchBox emulator wrappers in `scripts/install_launchbox_wrapper.py`
+### Unified Launcher
 
-## Documentation State
+- `crt_master.py` — interactive menu with 6 options:
+  1. RetroArch standalone launch and window lock
+  2. LaunchBox CRT Watcher (legacy mode, still functional)
+  3. LaunchBox Gaming Session (current recommended mode)
+  4. Plex launch and window lock
+  5. Restore Default Settings
+  6. Exit
 
-- Root docs are now modularized under `docs/`.
-- Legacy document locations are retained as pointer files for compatibility.
+### Gaming Session (Option 3) — Primary Workflow
 
-## Known Scaling Pressure
+- `launch_session.py` — orchestrator: loads manifest, patches configs, launches LaunchBox, runs watcher, restores configs on exit
+- `session/` package:
+  - `session/manifest.py` — loads and validates `gaming-manifest.json`
+  - `session/patcher.py` — dispatches patch handlers, backs up before patching, restores on exit
+  - `session/watcher.py` — multi-target poll loop; locks emulator windows to CRT; supports soft stop and reattach
+  - `session/backup.py` — numbered backup files with JSON manifest, per-file restore failure logging
+  - `session/window_utils.py` — shared Win32 helpers (find window, move window, enumerate PIDs)
+  - `session/patches/retroarch.py` — patches `retroarch.cfg` key/value pairs
+  - `session/patches/launchbox.py` — patches `Emulators.xml`, `BigBoxSettings.xml`, `Settings.xml`
+- `validate_session.py` — dry-run tool: backs up, patches, and restores without permanent changes
+- `profiles/gaming-manifest.json` — session configuration (what to patch, what to watch)
+- `profiles/launchbox-session.json`, `retroarch-session.json`, `dolphin-session.json`, `ppsspp-session.json`, `pcsx2-session.json` — per-app window tracking profiles
 
-- `crt_config.json` is currently used for both global and per-emulator values.
-- As more game-specific entries are added, central config complexity increases.
-- The roadmap in `docs/roadmaps/generic-wrapper-scaling-todo.md` tracks migration toward profile-based wrapper config.
+### LaunchBox Wrappers
 
-## Recommended Current Workflow
+- `integrations/launchbox/wrapper/launchbox_generic_wrapper.py` — configurable per-game startup wrapper
+- Per-emulator wrapper batch files under `integrations/launchbox/wrapper/`
+- Per-game profiles under `integrations/launchbox/wrapper/profiles/`
 
-1. Keep global monitor/layout behavior in `crt_config.json`.
-2. Use LaunchBox wrapper scripts for emulator startup stability.
-3. Prefer generic wrapper for new integrations where possible.
-4. Use debug logs when tuning window filters/timings.
+### Other
+
+- `launch_plex.py` — Plex launch and window lock loop
+- `launch_generic.py` — standalone single-profile window locker (used by option 1 / RetroArch mode)
+- `default_restore.py` — restores default settings from backup
+- `scripts/` — helper utilities (generate LaunchBox commands, check drift, installer)
+- `tools/` — calibration and inspector utilities
+
+## Recommended Workflow
+
+1. Run `python crt_master.py`.
+2. Choose **option 3** to start a gaming session:
+   - LaunchBox/BigBox opens on the main screen.
+   - Emulator configs are patched automatically.
+   - Any emulator launched from BigBox is moved to the CRT.
+   - Ctrl+C once: moves emulators to main screen, session stays alive (swap games).
+   - Ctrl+C twice within 5 seconds: ends session and restores all configs.
+3. If LaunchBox is already open, option 3 reattaches the watcher and still patches emulator configs.
+
+## Known Gaps
+
+- Steam/GOG games that run under a different process name than what is in their watch profile are not tracked. This is an accepted limitation for v1.
+- Two instances of the same emulator: only the first (by PID order) is tracked. The second floats uncontrolled.
+- `launchbox_settings` patches (BigBoxSettings.xml, Settings.xml) have no effect in reattach mode since LaunchBox already loaded them at startup.

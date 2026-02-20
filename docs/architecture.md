@@ -1,46 +1,92 @@
 # Architecture
 
-## Core Components
+## Entry Point
 
-- `crt_master.py`
-  - user-facing menu entrypoint
-  - dispatches to RetroArch/Plex/session flows
-- `launch_ra.py`
-  - RetroArch-specific launch + window lock loop
-- `launch_plex.py`
-  - Plex launch + window lock loop with border/style handling
-- `launchbox_crt_watcher.py`
-  - process/window watcher for LaunchBox/BigBox-launched games
-- `launchbox_session_mode.py`
-  - temporary config/session orchestration for LaunchBox flow
+`crt_master.py` — interactive menu that dispatches to one of six modes.
 
-## LaunchBox Wrappers
+## Gaming Session (Option 3)
 
-Folder: `integrations/launchbox/wrapper/`
+The primary gaming workflow. All components live under `session/`.
 
-- per-emulator wrappers:
-  - RetroArch, PPSSPP, Dolphin, PCSX2
-- generic wrapper:
-  - `launchbox_generic_wrapper.py` (parameterized behavior)
+```
+launch_session.py
+  └── session/manifest.py       load + validate gaming-manifest.json
+  └── session/patcher.py        backup → patch → restore on exit
+        └── session/patches/retroarch.py    retroarch.cfg key/value patching
+        └── session/patches/launchbox.py    Emulators.xml, BigBoxSettings.xml, Settings.xml patching
+  └── session/backup.py         numbered backup files, per-file restore failure logging
+  └── session/watcher.py        multi-target poll loop
+        └── session/window_utils.py   shared Win32 helpers
+```
 
-## Shared Configuration
+### Session Lifecycle
 
-- `crt_config.json` is the primary runtime configuration source.
-- Wrappers and launchers resolve executable paths and geometry from this file.
+1. Load `crt_config.json` and `gaming-manifest.json`.
+2. Check if primary (LaunchBox/BigBox) is already running:
+   - **Fresh start**: apply patches, launch LaunchBox, run watcher.
+   - **Reattach**: apply patches, skip launch (`proc=None`), run watcher.
+3. Watcher poll loop (every ~0.5 s):
+   - Check if LaunchBox/BigBox is still alive — exit if not.
+   - Handle Ctrl+C (see below).
+   - For each emulator watch target: find its window and snap it to its CRT rect.
+4. On exit: restore all patched configs, remove lockfile.
 
-## Generic Wrapper Runtime Model
+### Ctrl+C Behaviour
 
-1. Parse wrapper args.
-2. Resolve executable and launch arguments.
-3. Launch emulator process.
-4. Enumerate windows and select best candidate for tracked PID/process criteria.
-5. Enforce target rectangle during startup lock period.
-6. Stop enforcement on timeout, stop-flag, or primary-monitor handoff.
-7. Return child process exit code.
+- **Single Ctrl+C**: soft stop — moves all active emulator windows to the main screen and pauses tracking. Session stays alive; BigBox remains open for the next game launch.
+- **Second Ctrl+C within 5 seconds**: full shutdown — ends watcher, restores all configs.
+- A paused emulator auto-resumes tracking when its process exits (game closed).
 
-Full wrapper details: `docs/launchbox/generic-wrapper.md`
+### Data Files
 
-## Operational Notes
+- `profiles/gaming-manifest.json` — lists primary profile, watch profiles, and patches to apply
+- `profiles/launchbox-session.json` — primary process names and CRT rect (not tracked by watcher, stays on main screen)
+- `profiles/retroarch-session.json`, `dolphin-session.json`, `ppsspp-session.json`, `pcsx2-session.json` — emulator window tracking targets
 
-- Some workflows create runtime artifacts in repo root (for example debug logs and `wrapper_stop_enforce.flag`).
-- Keep these artifacts out of commits unless intentionally documenting/debugging behavior.
+### Single-Session Guard
+
+A lockfile at `.session.lock` (project root) prevents concurrent sessions. Always removed in `finally`. Contains the session PID for diagnostics.
+
+### Validation
+
+`validate_session.py --manifest profiles/gaming-manifest.json` — dry run: backs up, patches, and immediately restores. No permanent changes.
+
+---
+
+## LaunchBox Generic Wrapper
+
+`integrations/launchbox/wrapper/launchbox_generic_wrapper.py`
+
+Runs as a LaunchBox emulator `ApplicationPath` target. Launches the emulator, finds its window during startup, and snaps it to the CRT rect for a configurable lock period.
+
+Runtime flow:
+1. Parse arguments (profile mode or config-key mode).
+2. Load `crt_config.json` and optional profile file.
+3. Build launch command (emulator exe + args + ROM path from LaunchBox passthrough).
+4. Launch process.
+5. During lock window: find window, move to rect when it drifts.
+6. Exit with emulator exit code.
+
+Stop conditions: lock timeout expires, `wrapper_stop_enforce.flag` written by session watcher, or window lands on primary-monitor restore rect.
+
+See `docs/launchbox/generic-wrapper.md` for full CLI reference.
+
+---
+
+## LaunchBox Legacy Watcher (Option 2)
+
+`launchbox_crt_watcher.py` — older single-script watcher. Still functional but not the recommended path. Uses hardcoded process logic rather than profiles.
+
+---
+
+## Plex (Option 4)
+
+`launch_plex.py` — launches Plex Desktop, locks its window to the CRT rect, restores on Ctrl+C or exit.
+
+---
+
+## Shared Utilities
+
+- `session/window_utils.py` — all Win32 window operations used across the codebase
+- `crt_config.json` — global coordinates, executable paths, polling cadence, restore rect
+- `wrapper_stop_enforce.flag` — written by session watcher on soft stop or shutdown to signal wrapper scripts to disengage
