@@ -9,6 +9,7 @@ LAUNCHBOX_EXE = r"D:\Emulators\LaunchBox\LaunchBox.exe"
 LAUNCHBOX_DIR = r"D:\Emulators\LaunchBox"
 GENERIC_LAUNCHER = "launch_generic.py"
 RETROARCH_SESSION_PROFILE = os.path.join("profiles", "retroarch-session.json")
+LAUNCHBOX_SESSION_PROFILE = os.path.join("profiles", "launchbox-session.json")
 
 
 def stop_plex_lockers() -> None:
@@ -57,6 +58,29 @@ def run_retroarch_mode() -> None:
         pass
 
 
+def run_launchbox_session_mode() -> None:
+    if not os.path.exists(GENERIC_LAUNCHER):
+        print(f"Session launcher not found: {GENERIC_LAUNCHER}")
+        input("Press Enter to return to menu...")
+        return
+    if not os.path.exists(LAUNCHBOX_SESSION_PROFILE):
+        print(f"LaunchBox session profile not found: {LAUNCHBOX_SESSION_PROFILE}")
+        input("Press Enter to return to menu...")
+        return
+
+    try:
+        subprocess.run(
+            [
+                sys.executable,
+                GENERIC_LAUNCHER,
+                "--profile-file",
+                LAUNCHBOX_SESSION_PROFILE,
+            ]
+        )
+    except KeyboardInterrupt:
+        pass
+
+
 def run_plex_mode() -> None:
     stop_plex_lockers()
 
@@ -84,13 +108,14 @@ def main():
         print("========================================")
         print(" 1. [GAMING] Launch RetroArch")
         print(" 2. [GAMING] Launch LaunchBox CRT Watcher")
-        print(" 3. [CINEMA] Launch Plex")
-        print(" 4. [TOOLS]  Restore Default Settings")
-        print(" 5. [EXIT]   Close Menu")
+        print(" 3. [GAMING] Launch LaunchBox (Session)")
+        print(" 4. [CINEMA] Launch Plex")
+        print(" 5. [TOOLS]  Restore Default Settings")
+        print(" 6. [EXIT]   Close Menu")
         print("========================================")
 
         try:
-            choice = input("\nSelect an option (1-5): ")
+            choice = input("\nSelect an option (1-6): ")
             if choice == '1':
                 run_retroarch_mode()
             elif choice == '2':
@@ -119,8 +144,10 @@ def main():
                         print(restore_msg)
                         input("Press Enter to continue...")
             elif choice == '3':
-                run_plex_mode()
+                run_launchbox_session_mode()
             elif choice == '4':
+                run_plex_mode()
+            elif choice == '5':
                 ok, msg, restored = restore_defaults_from_backup()
                 print(msg)
                 if restored:
@@ -128,7 +155,7 @@ def main():
                     for item in restored:
                         print(f" - {item}")
                 input("\nPress Enter to return to menu...")
-            elif choice == '5':
+            elif choice == '6':
                 break
         except KeyboardInterrupt:
             print("\nInterrupted. Returning to menu...")

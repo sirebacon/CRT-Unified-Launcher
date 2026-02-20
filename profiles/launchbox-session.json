@@ -1,0 +1,12 @@
+{
+  "profile_version": 1,
+  "path": "D:\\Emulators\\LaunchBox\\LaunchBox.exe",
+  "dir": "D:\\Emulators\\LaunchBox",
+  "process_name": ["launchbox.exe"],
+  "title_contains": ["launchbox"],
+  "x": -1211,
+  "y": 43,
+  "w": 1057,
+  "h": 835,
+  "poll_slow": 0.5
+}
