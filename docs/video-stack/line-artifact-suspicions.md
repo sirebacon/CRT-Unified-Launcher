@@ -14,6 +14,22 @@ This note summarizes likely causes of the odd edge/line behavior seen in RetroAr
 - Some other RetroArch cores/systems show edge bending or odd lines.
 - Plex content does not show the same issue.
 - CRT hardware has already been tuned to a stable "best practical" state.
+- Scene-dependent squeeze behavior has been observed in both RetroArch and Dolphin.
+  - Some scenes render correctly.
+  - Other scenes appear squeezed inward.
+  - This is not tied to one emulator only.
+
+## Cross-Emulator Evidence (RetroArch + Dolphin)
+
+RetroArch and Dolphin are independent emulators with different rendering pipelines.  
+Seeing the same scene-dependent squeeze pattern in both increases confidence that the root
+cause is not emulator-specific code.
+
+Implication:
+- The problem is more likely a shared stack-level/content-state interaction:
+  - chain behavior under changing scene/output characteristics
+  - active-area/aspect shifts at the content level
+  - CRT edge sensitivity when effective visible area changes slightly
 
 ## Most Likely Explanation (Primary)
 
