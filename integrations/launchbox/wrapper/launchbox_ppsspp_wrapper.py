@@ -13,11 +13,21 @@ import win32process
 Rect = Tuple[int, int, int, int]
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "crt_config.json")
+SESSION_PROFILE_PATH = os.path.join(PROJECT_ROOT, "profiles", "ppsspp-session.json")
 
 
 def load_config() -> dict:
     with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
-        return json.load(f)
+        cfg = json.load(f)
+    # Rect comes from ppsspp-session.json — single source of truth shared with session watcher.
+    with open(SESSION_PROFILE_PATH, "r", encoding="utf-8-sig") as f:
+        profile = json.load(f)
+    cfg.setdefault("ppsspp", {})
+    cfg["ppsspp"]["x"] = profile["x"]
+    cfg["ppsspp"]["y"] = profile["y"]
+    cfg["ppsspp"]["w"] = profile["w"]
+    cfg["ppsspp"]["h"] = profile["h"]
+    return cfg
 
 
 def resolve_ppsspp_exe(cfg: dict) -> Tuple[str, str]:
@@ -37,13 +47,12 @@ def resolve_ppsspp_exe(cfg: dict) -> Tuple[str, str]:
 
 
 def target_rect(cfg: dict) -> Tuple[int, int, int, int]:
-    li = cfg.get("launcher_integration", {})
-    r = cfg.get("retroarch", {})
+    p = cfg.get("ppsspp", {})
     return (
-        int(li.get("x", r.get("x", -1211))),
-        int(li.get("y", r.get("y", 43))),
-        int(li.get("w", r.get("w", 1057))),
-        int(li.get("h", r.get("h", 835))),
+        int(p["x"]),
+        int(p["y"]),
+        int(p["w"]),
+        int(p["h"]),
     )
 
 

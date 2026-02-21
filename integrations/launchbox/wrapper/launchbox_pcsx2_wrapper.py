@@ -13,12 +13,22 @@ import win32process
 Rect = Tuple[int, int, int, int]
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "crt_config.json")
+SESSION_PROFILE_PATH = os.path.join(PROJECT_ROOT, "profiles", "pcsx2-session.json")
 STOP_ENFORCE_FLAG = os.path.join(PROJECT_ROOT, "wrapper_stop_enforce.flag")
 
 
 def load_config() -> dict:
     with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
-        return json.load(f)
+        cfg = json.load(f)
+    # Rect comes from pcsx2-session.json — single source of truth shared with session watcher.
+    with open(SESSION_PROFILE_PATH, "r", encoding="utf-8-sig") as f:
+        profile = json.load(f)
+    cfg.setdefault("pcsx2", {})
+    cfg["pcsx2"]["x"] = profile["x"]
+    cfg["pcsx2"]["y"] = profile["y"]
+    cfg["pcsx2"]["w"] = profile["w"]
+    cfg["pcsx2"]["h"] = profile["h"]
+    return cfg
 
 
 def resolve_pcsx2_exe(cfg: dict) -> Tuple[str, str]:
@@ -38,14 +48,12 @@ def resolve_pcsx2_exe(cfg: dict) -> Tuple[str, str]:
 
 
 def target_rect(cfg: dict) -> Tuple[int, int, int, int]:
-    li = cfg.get("launcher_integration", {})
-    r = cfg.get("retroarch", {})
     p = cfg.get("pcsx2", {})
     return (
-        int(p.get("x", li.get("x", r.get("x", -1211)))),
-        int(p.get("y", li.get("y", r.get("y", 43)))),
-        int(p.get("w", li.get("w", r.get("w", 1057)))),
-        int(p.get("h", li.get("h", r.get("h", 835)))),
+        int(p["x"]),
+        int(p["y"]),
+        int(p["w"]),
+        int(p["h"]),
     )
 
 

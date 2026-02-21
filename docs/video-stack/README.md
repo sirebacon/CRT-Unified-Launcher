@@ -12,3 +12,4 @@
 - `docs/video-stack/components.md`
 - `docs/video-stack/measurements.md`
 - `docs/video-stack/device-listings.md`
+- `docs/video-stack/line-artifact-suspicions.md`

@@ -18,20 +18,14 @@
     "dir": "D:\\Emulators\\PPSSPPWindowsGold"
   },
   "dolphin": {
+    "_note": "rect (x/y/w/h) is read from profiles/dolphin-session.json — edit there",
     "path": "D:\\Emulators\\Dolphin-x64\\Dolphin.exe",
-    "dir": "D:\\Emulators\\Dolphin-x64",
-    "x": -1211,
-    "y": 43,
-    "w": 1060,
-    "h": 835
+    "dir": "D:\\Emulators\\Dolphin-x64"
   },
   "pcsx2": {
+    "_note": "rect (x/y/w/h) is read from profiles/pcsx2-session.json — edit there",
     "path": "D:\\Emulators\\Pcsx2\\pcsx2-qt.exe",
-    "dir": "D:\\Emulators\\Pcsx2",
-    "x": -1211,
-    "y": 43,
-    "w": 1057,
-    "h": 848
+    "dir": "D:\\Emulators\\Pcsx2"
   },
   "launcher_integration": {
     "enabled": true,

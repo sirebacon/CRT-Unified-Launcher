@@ -14,13 +14,23 @@ import win32process
 Rect = Tuple[int, int, int, int]
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 CONFIG_PATH = os.path.join(PROJECT_ROOT, "crt_config.json")
+SESSION_PROFILE_PATH = os.path.join(PROJECT_ROOT, "profiles", "dolphin-session.json")
 STOP_ENFORCE_FLAG = os.path.join(PROJECT_ROOT, "wrapper_stop_enforce.flag")
 DEBUG_LOG_PATH = os.path.join(PROJECT_ROOT, "dolphin_wrapper_debug.log")
 
 
 def load_config() -> dict:
     with open(CONFIG_PATH, "r", encoding="utf-8-sig") as f:
-        return json.load(f)
+        cfg = json.load(f)
+    # Rect comes from dolphin-session.json — single source of truth shared with session watcher.
+    with open(SESSION_PROFILE_PATH, "r", encoding="utf-8-sig") as f:
+        profile = json.load(f)
+    cfg.setdefault("dolphin", {})
+    cfg["dolphin"]["x"] = profile["x"]
+    cfg["dolphin"]["y"] = profile["y"]
+    cfg["dolphin"]["w"] = profile["w"]
+    cfg["dolphin"]["h"] = profile["h"]
+    return cfg
 
 
 def resolve_dolphin_exe(cfg: dict) -> Tuple[str, str]:
@@ -37,13 +47,11 @@ def resolve_dolphin_exe(cfg: dict) -> Tuple[str, str]:
 
 def target_rect(cfg: dict) -> Tuple[int, int, int, int]:
     d = cfg.get("dolphin", {})
-    li = cfg.get("launcher_integration", {})
-    r = cfg.get("retroarch", {})
     return (
-        int(d.get("x", li.get("x", r.get("x", -1211)))),
-        int(d.get("y", li.get("y", r.get("y", 43)))),
-        int(d.get("w", li.get("w", r.get("w", 1057)))),
-        int(d.get("h", li.get("h", r.get("h", 835)))),
+        int(d["x"]),
+        int(d["y"]),
+        int(d["w"]),
+        int(d["h"]),
     )
 
 
