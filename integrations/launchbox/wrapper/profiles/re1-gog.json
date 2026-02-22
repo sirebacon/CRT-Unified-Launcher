@@ -11,6 +11,8 @@
   "dir": "D:\\GOG Galaxy\\Games\\Resident Evil",
 
   "process_name": ["biohazard.exe"],
+  "_gameplay_title": "RESIDENT EVIL",
+  "_config_title": "CONFIGURATION",
 
   "position_only": true,
   "max_lock_seconds": 120.0

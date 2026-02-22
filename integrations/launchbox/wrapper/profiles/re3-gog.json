@@ -9,5 +9,7 @@
   "path": "D:\\GOG Galaxy\\Games\\Resident Evil 3\\bio3 Uncensored.EXE",
   "dir": "D:\\GOG Galaxy\\Games\\Resident Evil 3",
 
-  "process_name": ["bio3 uncensored.exe"]
+  "process_name": ["bio3 uncensored.exe"],
+  "_gameplay_title": "NEMISIS",
+  "_config_title": "CONFIGURATION"
 }

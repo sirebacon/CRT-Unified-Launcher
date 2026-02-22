@@ -1,0 +1,50 @@
+{
+  "_note": "Tokens are substring matches \u2014 any part of the display/audio device name works.",
+  "moonlight_dir": "D:\\Emulators\\MoonlightPortable-x64-6.1.0",
+  "moonlight": {
+    "_note_idle": "idle_rect: where Moonlight sits when not streaming. Saved by 'set-idle-pos'.",
+    "idle_rect": {
+      "x": 69,
+      "y": 99,
+      "w": 1598,
+      "h": 851
+    },
+    "_note_crt": "crt_rect: override for Moonlight position on the CRT. Saved by 'set-crt-pos'. Set to null to use display detection.",
+    "crt_rect": {
+      "x": 1170,
+      "y": -80,
+      "w": 1410,
+      "h": 1110
+    }
+  },
+  "vdd_attach_timeout_seconds": 15,
+  "fullscreen_confirm_seconds": 2.0,
+  "display": {
+    "re_primary_token": "SudoMaker Virtual Display",
+    "crt_token": "NVIDIA GeForce RTX 4090 Laptop GPU",
+    "crt_target_refresh_hz": 60,
+    "restore_primary_token": "Intel(R) UHD Graphics",
+    "required_groups": {
+      "internal_display": [
+        "Internal Display",
+        "Intel(R) UHD Graphics"
+      ],
+      "crt_display": [
+        "CP-1262HE",
+        "NVIDIA GeForce RTX 4090 Laptop GPU"
+      ],
+      "moonlight_display": [
+        "SudoMaker Virtual Display"
+      ]
+    }
+  },
+  "audio": {
+    "re_device_token": "CP-1262HE (NVIDIA High Definition Audio)",
+    "restore_device_token": "Speakers (Realtek(R) Audio)"
+  },
+  "game_profiles": {
+    "re1": "integrations/launchbox/wrapper/profiles/re1-gog.json",
+    "re2": "integrations/launchbox/wrapper/profiles/re2-gog.json",
+    "re3": "integrations/launchbox/wrapper/profiles/re3-gog.json"
+  }
+}

@@ -1,4 +1,5 @@
 """Shared Win32 window helpers used across session launchers."""
+import time
 from typing import List, Optional, Set, Tuple
 
 import win32con
@@ -65,12 +66,16 @@ def find_window(
     class_contains: List[str],
     title_contains: List[str],
     match_any_pid: bool = False,
+    include_iconic: bool = False,
 ) -> Optional[int]:
     """Find the largest visible window matching the given filters.
 
     If pid is given and match_any_pid is False, only windows whose thread PID
     belongs to the pid's process tree are considered.  If match_any_pid is True
     the PID filter is skipped entirely.
+
+    Set include_iconic=True to also consider minimized (taskbar) windows —
+    useful when a fullscreen game pushes the target window to the taskbar.
 
     Returns the HWND of the best match, or None.
     """
@@ -80,7 +85,9 @@ def find_window(
     best, best_area = None, -1
     for hwnd in enum_windows():
         try:
-            if not win32gui.IsWindowVisible(hwnd) or win32gui.IsIconic(hwnd):
+            if not win32gui.IsWindowVisible(hwnd):
+                continue
+            if not include_iconic and win32gui.IsIconic(hwnd):
                 continue
             if pids is not None:
                 _, win_pid = win32process.GetWindowThreadProcessId(hwnd)
@@ -101,6 +108,31 @@ def find_window(
     return best
 
 
+def is_window_fullscreen(hwnd: int) -> bool:
+    """Return True if the window appears to be in fullscreen or borderless mode.
+
+    Checks two signals (either is sufficient):
+    1. WS_CAPTION absent from the window style — fullscreen strips the title bar.
+    2. Window rect matches the monitor it is on exactly.
+    """
+    try:
+        style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
+        if not (style & win32con.WS_CAPTION):
+            return True
+    except Exception:
+        pass
+    try:
+        l, t, r, b = win32gui.GetWindowRect(hwnd)
+        monitor = win32gui.MonitorFromWindow(hwnd, win32con.MONITOR_DEFAULTTONEAREST)
+        info = win32gui.GetMonitorInfo(monitor)
+        ml, mt, mr, mb = info["Monitor"]
+        if l == ml and t == mt and r == mr and b == mb:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def move_window(
     hwnd: int, x: int, y: int, w: int, h: int, strip_caption: bool = False
 ) -> None:
@@ -110,7 +142,11 @@ def move_window(
     repositioning so the frame does not consume space inside the given rect.
     """
     try:
-        if win32gui.IsZoomed(hwnd):
+        if win32gui.IsIconic(hwnd):
+            # Minimized (taskbar) — restore before repositioning.
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+            time.sleep(0.15)
+        elif win32gui.IsZoomed(hwnd):
             win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
     except Exception:
         pass

@@ -137,17 +137,16 @@ def set_display_refresh_best_effort(display_token: str, refresh_hz: int) -> bool
         dm = win32api.EnumDisplaySettings(dev_name, win32con.ENUM_CURRENT_SETTINGS)
         current = int(getattr(dm, "DisplayFrequency", 0) or 0)
         if current == int(refresh_hz):
-            print(f"[re-stack] Refresh already {refresh_hz} Hz on {dev_name}.")
             return True
         dm.DisplayFrequency = int(refresh_hz)
         dm.Fields |= win32con.DM_DISPLAYFREQUENCY
         rc = win32api.ChangeDisplaySettingsEx(dev_name, dm, win32con.CDS_UPDATEREGISTRY)
         if rc == win32con.DISP_CHANGE_SUCCESSFUL:
-            print(f"[re-stack] Set refresh {refresh_hz} Hz on {dev_name}.")
+            print(f"[re-stack] Refresh corrected: {current} Hz -> {refresh_hz} Hz on {dev_name}.")
             return True
         print(
-            f"[re-stack] Failed to set refresh {refresh_hz} Hz on {dev_name} "
-            f"(code {rc})."
+            f"[re-stack] Failed to correct refresh from {current} Hz to {refresh_hz} Hz "
+            f"on {dev_name} (code {rc})."
         )
         return False
     except Exception as e:

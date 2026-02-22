@@ -9,5 +9,7 @@
   "path": "D:\\GOG Galaxy\\Games\\Resident Evil 2\\Resident Evil 2.exe",
   "dir": "D:\\GOG Galaxy\\Games\\Resident Evil 2",
 
-  "process_name": ["resident evil 2.exe"]
+  "process_name": ["resident evil 2.exe"],
+  "_gameplay_title": "RESIDENT EVIL 2",
+  "_config_title": "CONFIGURATION"
 }

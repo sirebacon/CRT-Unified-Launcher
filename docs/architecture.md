@@ -85,6 +85,88 @@ See `docs/launchbox/generic-wrapper.md` for full CLI reference.
 
 ---
 
+## Resident Evil Stack — Moonlight Streaming Mode (Options 5 / 7)
+
+`launch_resident_evil_stack.py` — orchestrates a Moonlight-based CRT streaming session for Resident Evil 1/2/3 (GOG).
+
+```
+launch_resident_evil_stack.py      CLI + constants + orchestration
+  └── re_stack_config.json         All configurable tokens, paths, timeouts
+  └── session/display_api.py       Display enumeration, primary switching, refresh rate, CRT rect
+  └── session/vdd.py               Moonlight virtual display presence check + recovery re-attach
+  └── session/audio.py             Audio device switching (AudioDeviceCmdlets or nircmd)
+  └── session/moonlight.py         Moonlight process management, window placement, gameplay detection
+  └── session/window_utils.py      Shared Win32 window helpers (also used by gaming session)
+```
+
+### Why Moonlight Virtual Display Is Set As Primary
+
+Resident Evil (GOG) respects the Windows primary monitor when choosing where to render. Setting the Moonlight virtual display (`SudoMaker Virtual Display Adapter`) as primary forces the game to render on it. Moonlight then streams that output to the CRT client.
+
+### Primary Display Switching
+
+Setting a virtual display as primary via `ChangeDisplaySettingsEx CDS_SET_PRIMARY` returns `DISP_CHANGE_FAILED (-1)` for some virtual display drivers. The stack uses a two-tier approach:
+
+1. `ChangeDisplaySettingsEx` with three position variants (keep current position, zero position, no position change).
+2. If all three fail: `SetDisplayConfig` — repositions all source modes so the target lands at `(0, 0)`, which is how Windows determines the primary monitor.
+
+After the primary switch, the Windows virtual desktop coordinate space shifts (SudoMaker is now at 0,0). The Moonlight window must be explicitly moved to the internal display immediately, or it drifts into virtual display space and becomes invisible.
+
+### VDD Lifecycle
+
+The SudoMaker VDD is an IddCx-based virtual display driver managed by Apollo (the streaming host). IddCx drivers cannot be re-attached via standard Windows display APIs (`SetDisplayConfig SDC_TOPOLOGY_EXTEND` or `ChangeDisplaySettingsEx`) once soft-disconnected — these return error 87 or `DISP_CHANGE_BADMODE` respectively.
+
+- **On `start`**: wait for VDD to appear (Apollo should have it attached). If soft-disconnected, attempt recovery by enumerating driver-supported modes via index (`EnumDisplaySettings(dev, 0)`, `(dev, 1)`, ...) and re-enabling with `ChangeDisplaySettingsEx`. Poll up to `VDD_ATTACH_TIMEOUT_SECONDS`.
+- **On `restore`**: VDD is left attached. Only primary display and audio are restored. Unplugging the VDD is not done because re-attachment requires Apollo to restart if recovery mode fails.
+
+The VDD stays attached between sessions as a harmless secondary display.
+
+### Moonlight Window Lifecycle
+
+| Phase | Moonlight window position |
+|---|---|
+| Before session | Internal display (wherever it was) |
+| After VDD plug / before primary switch | Internal display |
+| After primary switch | Explicitly moved to internal display (coordinate space shifted) |
+| During config/launcher screens | Internal display (user sees config on laptop screen) |
+| When gameplay window detected | Moved to CRT display bounds |
+| After restore | Moved back to internal display |
+
+### Gameplay Window Detection
+
+Moonlight itself stays windowed (has a title bar) even when the game inside it goes fullscreen. WS_CAPTION detection is therefore unreliable as a CRT-move trigger.
+
+Instead, each profile JSON declares a `gameplay_title` — a window title substring that appears only when the actual game window is open, not during the launcher/config screen:
+
+| Profile | `gameplay_title` | Distinguishes from |
+|---|---|---|
+| `re1-gog.json` | `"RESIDENT EVIL"` | `"CONFIGURATION"`, `"MOD SELECTION"` |
+| `re2-gog.json` | `"RESIDENT EVIL 2"` | `"CONFIGURATION"` |
+| `re3-gog.json` | `"NEMISIS"` | `"CONFIGURATION"` |
+
+The enforcement loop calls `is_gameplay_window_visible(gameplay_title)` once per second. When detected for 2 continuous seconds (`fullscreen_confirm_seconds`), Moonlight is moved to the CRT.
+
+### Session Flow
+
+1. Abort if a RE game process is already running.
+2. Ensure Moonlight process is running.
+3. Wait for Moonlight virtual display (SudoMaker VDD) to be attached.
+4. Preflight: confirm internal + CRT + Moonlight displays are all attached.
+5. Save current primary, set Moonlight virtual display as primary, set CRT refresh.
+6. Move Moonlight window to internal display (corrects coordinate space shift from primary switch).
+7. Switch audio to CRT output device.
+8. Launch game wrapper (`launchbox_generic_wrapper.py`).
+9. Enforcement loop:
+   - Re-apply primary if it drifts.
+   - Correct CRT refresh every ~5 s if it drifts.
+   - Detect gameplay window via title; move Moonlight to CRT when confirmed.
+10. On exit/crash/Ctrl+C: restore primary, audio, move Moonlight to internal.
+
+See `docs/runbooks/resident-evil-stack-automation.md` for commands and troubleshooting.
+See `docs/runbooks/resident-evil-stack-code-flow.md` for detailed function-level flow.
+
+---
+
 ## Shared Utilities
 
 - `session/window_utils.py` — all Win32 window operations used across the codebase
