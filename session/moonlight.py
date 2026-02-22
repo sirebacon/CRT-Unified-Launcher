@@ -153,6 +153,65 @@ def _crt_fallback_rect(crt_config_path: Optional[str]) -> Tuple[int, int, int, i
     return (-1211, 43, 1057, 835)
 
 
+def _intersection_area(
+    a: Tuple[int, int, int, int], b: Tuple[int, int, int, int]
+) -> int:
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    ax2, ay2 = ax + aw, ay + ah
+    bx2, by2 = bx + bw, by + bh
+    ix1 = max(ax, bx)
+    iy1 = max(ay, by)
+    ix2 = min(ax2, bx2)
+    iy2 = min(ay2, by2)
+    if ix2 <= ix1 or iy2 <= iy1:
+        return 0
+    return (ix2 - ix1) * (iy2 - iy1)
+
+
+def _nearest_wrapped_offset(delta: int, span: int) -> int:
+    """Normalize an offset to the nearest equivalent position in span-sized steps."""
+    if span <= 0:
+        return delta
+    return delta - round(delta / span) * span
+
+
+def _maybe_reanchor_crt_rect(
+    rect: Tuple[int, int, int, int],
+    crt_display_rect: Optional[Tuple[int, int, int, int]],
+) -> Tuple[int, int, int, int]:
+    """Adjust a saved absolute rect when desktop origin shifts after primary changes.
+
+    The saved Moonlight CRT rect is often tuned relative to the CRT display (small
+    x/y offsets to hide edges). When Windows re-roots the desktop, absolute x/y can
+    shift by whole-monitor widths/heights. This re-anchors the rect to the current
+    CRT monitor if doing so improves overlap with the CRT display bounds.
+    """
+    if crt_display_rect is None:
+        return rect
+
+    rx, ry, rw, rh = rect
+    dx, dy, dw, dh = crt_display_rect
+    if dw <= 0 or dh <= 0:
+        return rect
+
+    current_overlap = _intersection_area(rect, crt_display_rect)
+    rel_x = _nearest_wrapped_offset(rx - dx, dw)
+    rel_y = _nearest_wrapped_offset(ry - dy, dh)
+    candidate = (dx + rel_x, dy + rel_y, rw, rh)
+    candidate_overlap = _intersection_area(candidate, crt_display_rect)
+
+    if candidate_overlap > current_overlap:
+        print(
+            "[re-stack] Re-anchored configured CRT rect to current CRT display origin: "
+            f"x={candidate[0]}, y={candidate[1]}, w={candidate[2]}, h={candidate[3]} "
+            f"(was x={rx}, y={ry}; CRT x={dx}, y={dy}, w={dw}, h={dh})"
+        )
+        return candidate
+
+    return rect
+
+
 def move_moonlight_to_crt(
     crt_tokens: List[str],
     moonlight_dir: str,
@@ -166,11 +225,12 @@ def move_moonlight_to_crt(
       2. Live CRT display bounds via display enumeration
       3. launcher_integration rect from crt_config.json (legacy fallback)
     """
+    live_crt_rect = get_crt_display_rect(crt_tokens)
     if crt_rect is not None:
-        x, y, w, h = crt_rect
+        x, y, w, h = _maybe_reanchor_crt_rect(crt_rect, live_crt_rect)
         print(f"[re-stack] Using configured CRT rect: x={x}, y={y}, w={w}, h={h}")
     else:
-        rect = get_crt_display_rect(crt_tokens)
+        rect = live_crt_rect
         if rect is None:
             x, y, w, h = _crt_fallback_rect(crt_config_path)
             print(
