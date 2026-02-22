@@ -29,6 +29,7 @@ from session.display_api import (
 )
 from session.moonlight import (
     ensure_moonlight_running,
+    find_moonlight_window,
     is_gameplay_window_visible,
     is_moonlight_fullscreen,
     move_moonlight_to_crt,
@@ -286,8 +287,13 @@ def _move_re_folder_window_to_internal(profile_path: str) -> bool:
     margin_y = 60
     x = ix + margin_x
     y = iy + margin_y
-    w = max(700, min(1400, iw - (margin_x * 2)))
-    h = max(500, min(900, ih - (margin_y * 2)))
+    ref_size = _get_re_folder_template_size()
+    if ref_size is not None:
+        pref_w, pref_h = ref_size
+    else:
+        pref_w, pref_h = (1400, 900)
+    w = max(700, min(pref_w, iw - (margin_x * 2)))
+    h = max(500, min(pref_h, ih - (margin_y * 2)))
 
     title_hint = _folder_window_title_hint_from_profile(profile_path)
     for _ in range(24):
@@ -320,6 +326,36 @@ def _find_re_folder_window(profile_path: str) -> Optional[int]:
     return hwnd
 
 
+def _get_re_folder_window_size(profile_key: str) -> Optional[tuple]:
+    """Return (w, h) from an open RE Explorer folder window for the given profile key."""
+    profile_path = GAME_PROFILES.get(profile_key)
+    if not profile_path or not os.path.exists(profile_path):
+        return None
+    title_hint = _folder_window_title_hint_from_profile(profile_path)
+    hwnd = find_window(None, ["cabinetwclass"], [title_hint], match_any_pid=True)
+    if hwnd is None:
+        return None
+    try:
+        _, _, w, h = get_rect(hwnd)
+    except Exception:
+        return None
+    if w <= 0 or h <= 0:
+        return None
+    return (w, h)
+
+
+def _get_re_folder_template_size() -> Optional[tuple]:
+    """Use any currently open RE folder as a size template (prefer RE1, then RE2, then RE3)."""
+    for key in ("re1", "re2", "re3"):
+        size = _get_re_folder_window_size(key)
+        if size is None:
+            continue
+        w, h = size
+        print(f"[re-stack] Using current {key.upper()} folder window size as template: w={w}, h={h}")
+        return size
+    return None
+
+
 def _rect_overlap_ratio(a: tuple, b: tuple) -> float:
     ax, ay, aw, ah = a
     bx, by, bw, bh = b
@@ -345,11 +381,32 @@ def _is_re_folder_on_moonlight_display(profile_path: str) -> Optional[bool]:
     return _rect_overlap_ratio(win_rect, moon_rect) >= 0.5
 
 
-def _move_moonlight_back_to_internal_manual() -> bool:
-    """Manual mode return path: prefer current internal display bounds over saved idle rect."""
-    print("[re-stack] Returning Moonlight to Internal Display using current display layout...")
+def _move_moonlight_back_to_internal_manual(
+    restore_rect: Optional[tuple] = None,
+) -> bool:
+    """Manual mode return path.
+
+    Prefer the exact pre-CRT Moonlight rect captured earlier in the same session.
+    Fall back to the current internal display bounds, then the configured idle rect.
+    """
+    if restore_rect is not None:
+        x, y, w, h = restore_rect
+        print(
+            "[re-stack] Returning Moonlight to pre-move manual rect: "
+            f"x={x}, y={y}, w={w}, h={h}"
+        )
+        if move_moonlight_to_internal(
+            REQUIRED_DISPLAY_GROUPS["internal_display"],
+            MOONLIGHT_DIR,
+            idle_rect=restore_rect,
+        ):
+            return True
+        print("[re-stack] Pre-move rect restore failed; trying current internal display layout...")
+    else:
+        print("[re-stack] Returning Moonlight to Internal Display using current display layout...")
+
     # In manual mode the user may have changed topology/positions, so the saved
-    # idle rect can be stale. Prefer live internal display bounds first.
+    # idle rect can be stale. Prefer live internal display bounds before config.
     if move_moonlight_to_internal(
         REQUIRED_DISPLAY_GROUPS["internal_display"],
         MOONLIGHT_DIR,
@@ -362,6 +419,23 @@ def _move_moonlight_back_to_internal_manual() -> bool:
         MOONLIGHT_DIR,
         idle_rect=MOONLIGHT_IDLE_RECT,
     )
+
+
+def _capture_moonlight_rect_for_manual_restore() -> Optional[tuple]:
+    """Read the current Moonlight window rect for later manual-mode restoration."""
+    try:
+        hwnd = find_moonlight_window(MOONLIGHT_DIR)
+        if not hwnd:
+            return None
+        rect = get_rect(hwnd)
+        x, y, w, h = rect
+        print(
+            "[re-stack] Captured Moonlight manual restore rect: "
+            f"x={x}, y={y}, w={w}, h={h}"
+        )
+        return rect
+    except Exception:
+        return None
 
 
 def _print_manual_mode_checklist(game: str) -> None:
@@ -606,6 +680,7 @@ def manual_stack(game: str) -> int:
     interrupted = False
     game_was_running = False
     last_wait_log = 0.0
+    manual_return_rect: Optional[tuple] = None
 
     try:
         if is_re_game_running():
@@ -615,6 +690,9 @@ def manual_stack(game: str) -> int:
         if not ensure_moonlight_running(MOONLIGHT_EXE, MOONLIGHT_DIR):
             print("[re-stack] Moonlight requirement failed; aborting.")
             return 1
+
+        # Capture the exact Moonlight size/position before any topology/settings changes.
+        manual_return_rect = _capture_moonlight_rect_for_manual_restore()
 
         _open_re_game_folder(profile)
         _move_re_folder_window_to_internal(profile)
@@ -644,6 +722,9 @@ def manual_stack(game: str) -> int:
             return 1
 
         print("[re-stack] Verified 3 displays and required display matches.")
+        if manual_return_rect is None:
+            # Fallback if Moonlight was not detectable at startup.
+            manual_return_rect = _capture_moonlight_rect_for_manual_restore()
         print("[re-stack] Moving Moonlight to CRT display...")
         moved = move_moonlight_to_crt(
             REQUIRED_DISPLAY_GROUPS["crt_display"],
@@ -678,7 +759,7 @@ def manual_stack(game: str) -> int:
                     print("[re-stack] RE game process detected. Monitoring for exit...")
             elif game_was_running:
                 print("[re-stack] RE game has exited. Moving Moonlight back to Internal Display...")
-                _move_moonlight_back_to_internal_manual()
+                _move_moonlight_back_to_internal_manual(manual_return_rect)
                 set_default_audio_best_effort(RESTORE_AUDIO_DEVICE_TOKEN)
                 print("[re-stack] Moonlight move-to-internal requested.")
                 print("[re-stack] Reminder: set your primary display back manually.")
@@ -694,7 +775,7 @@ def manual_stack(game: str) -> int:
         print("[re-stack] Ctrl+C detected.")
         print("[re-stack] Attempting to move Moonlight back to Internal Display...")
         try:
-            _move_moonlight_back_to_internal_manual()
+            _move_moonlight_back_to_internal_manual(manual_return_rect)
             set_default_audio_best_effort(RESTORE_AUDIO_DEVICE_TOKEN)
         except Exception:
             pass
