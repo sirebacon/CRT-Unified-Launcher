@@ -6,16 +6,24 @@ Date: 2026-02-22
 
 Explain the runtime flow of the Resident Evil stack implementation so it can be adjusted safely.
 
+Status (current):
+
+- Supported workflow: manual mode (`manual --game re1|re2|re3`) in `session/re_manual_mode.py`
+- Automatic mode (`start`) is preserved in `session/re_auto_mode.py` but is on hold due to inconsistent behavior
+
 Primary entrypoint:
 
 - `launch_resident_evil_stack.py`
 
-Supporting modules:
+Supporting modules (core):
 
 - `session/display_api.py`
 - `session/moonlight.py`
 - `session/audio.py`
 - `session/vdd.py`
+- `session/re_manual_mode.py`
+- `session/re_auto_mode.py` (legacy/on hold)
+- `session/re_preflight.py`
 
 ## High-Level Design
 
@@ -30,12 +38,12 @@ Resident Evil itself is launched through the existing generic wrapper:
 
 - `integrations/launchbox/wrapper/launchbox_generic_wrapper.py`
 
-The RE stack does not patch the game binary. It prepares system state, launches the wrapper, enforces drift correction, then restores state.
+The RE stack does not patch the game binary. The current manual workflow guides setup, verifies displays, moves Moonlight/audio, and restores Moonlight/audio on exit. The older automatic workflow (still documented below) additionally enforces primary/refresh drift and gameplay-title-triggered CRT moves.
 
 ## File Responsibilities
 
 - `launch_resident_evil_stack.py`
-  - CLI (`start`, `restore`, `inspect`)
+  - CLI (`start`, `manual`, `restore`, `inspect`)
   - constants/tokens/paths (loaded from `re_stack_config.json`)
   - preflight sequence
   - session enforcement loop (primary drift, refresh drift, gameplay window detection)
@@ -77,9 +85,10 @@ This happens before argument parsing, so all command output (`inspect`, `start`,
 ### `main()`
 
 1. Calls `_enable_persistent_logging()`
-2. Parses args (`start`, `restore`, `inspect`)
+2. Parses args (`start`, `manual`, `restore`, `inspect`)
 3. Dispatches to:
-   - `start_stack()`
+   - `start_stack()` (legacy/on hold)
+   - `manual_stack()` (current supported workflow)
    - `restore_stack()`
    - `inspect_state()`
 
@@ -87,11 +96,12 @@ This happens before argument parsing, so all command output (`inspect`, `start`,
 
 Subcommands:
 
-- `start --game re1|re2|re3 [--debug] [passthrough...]`
+- `manual --game re1|re2|re3` (current supported workflow)
+- `start --game re1|re2|re3 ...` (legacy/on hold)
 - `restore`
 - `inspect`
 
-`--debug` is passed through to the generic wrapper (wrapper file logging), not just the RE stack.
+`start`/auto-mode flags below are kept for reference because the code path remains in the repo.
 
 ## `inspect` Flow
 
@@ -111,7 +121,23 @@ Steps:
 
 Use this when display names/tokens drift or hardware changes.
 
-## `start` Flow (Core Session)
+## `manual` Flow (Current Supported Session)
+
+Function: `session.re_manual_mode.manual_stack(game)`
+
+High-level flow:
+
+1. Ensure Moonlight is running.
+2. Capture current Moonlight rect for later restore.
+3. Open selected RE folder in Explorer and move it to the internal display.
+4. Wait for Moonlight VDD and open Windows Display Settings.
+5. Print guided instructions for manual display setup (user sets primary and resolutions).
+6. Verify 3-display topology and required display token matches.
+7. Move Moonlight to the CRT and switch audio to the CRT device.
+8. User launches RE manually.
+9. On game exit or `Ctrl+C`, move Moonlight back to the captured pre-move rect and restore audio.
+
+## `start` Flow (Legacy / On Hold)
 
 Function: `start_stack(game, debug, passthrough)`
 
@@ -218,7 +244,7 @@ Why the confirmation timer: brief loading screens or transitions can momentarily
 
 Restore only runs if `state_applied` is True or the wrapper process was started. This prevents restore from running when preflight fails early (e.g. Moonlight not found).
 
-This is why menu option 7 is recovery-only now.
+This is why the Tools submenu recovery command exists (older docs may refer to the previous top-level menu option 7).
 
 ## `restore` Flow (Manual Recovery or Auto-Restore Backend)
 

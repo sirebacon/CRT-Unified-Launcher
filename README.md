@@ -98,14 +98,17 @@ Known behavior:
   - `docs/video-stack/line-artifact-suspicions.md`
   - per-core RetroArch overrides
 
-## Resident Evil Stack Automation
+## Resident Evil Stack (Manual Mode - Supported)
 
-You can automate GOG RE launches (RE1/RE2/RE3) with the existing wrapper profiles:
+Resident Evil mode is currently run in guided manual mode (recommended/supported).
+Automatic RE mode (`start`) is still in the codebase but is on hold because it has been too finicky/inconsistent.
+
+Use:
 
 ```powershell
-python launch_resident_evil_stack.py start --game re1
-python launch_resident_evil_stack.py start --game re2
-python launch_resident_evil_stack.py start --game re3
+python launch_resident_evil_stack.py manual --game re1
+python launch_resident_evil_stack.py manual --game re2
+python launch_resident_evil_stack.py manual --game re3
 python launch_resident_evil_stack.py inspect
 ```
 
@@ -115,23 +118,23 @@ Restore/reverse helper:
 python launch_resident_evil_stack.py restore
 ```
 
-Auto-restore behavior:
-- `start --game reX` now auto-runs restore when the game process exits, crashes, or you press `Ctrl+C`.
-- Manual `restore` remains available as a recovery command.
+Manual-mode behavior:
+- `manual --game reX` guides display setup, moves Moonlight to CRT after your setup confirmation, switches audio to CRT, and returns Moonlight/audio on game exit or `Ctrl+C`.
+- Manual `restore` remains available as a recovery command (mainly for interrupted older/automatic sessions).
 
-RE start preflight requirements:
+RE manual-mode preflight requirements:
 - Moonlight must be running from `D:\Emulators\MoonlightPortable-x64-6.1.0` (script auto-starts it if needed).
 - Required display set must be present or launch is aborted:
   - internal display (`Internal Display` or `Intel(R) UHD Graphics`)
   - CRT display (`CP-1262HE` or `NVIDIA GeForce RTX 4090 Laptop GPU`)
   - virtual display (`SudoMaker Virtual Display`)
-- Moonlight window is moved to CRT usable rect from `crt_config.json` (`launcher_integration.x/y/w/h`) before RE launch.
+- Moonlight window is moved to the configured RE CRT rect after manual display setup is completed.
 
-Resident Evil mode system state behavior:
-- On `start`: attempts to set primary display to token `SudoMaker Virtual Display`
-- On `start`: attempts to set default playback audio to token `CP-1262HE (NVIDIA High Definition Audio)`
-- On `restore`: attempts to set primary display back to token `Internal Display`
-- On `restore`: attempts to set default playback audio back to token `Speakers (Realtek(R) Audio)`
+Resident Evil manual-mode behavior:
+- You set the primary display manually during setup.
+- On manual mode CRT move: script attempts to set default playback audio to token `CP-1262HE (NVIDIA High Definition Audio)`.
+- On game exit / `Ctrl+C`: script moves Moonlight back to its captured pre-move rect and restores default playback audio to token `Speakers (Realtek(R) Audio)`.
+- You set the primary display back manually after the session.
 
 This restore command:
 - stops active generic-wrapper enforcement for RE stack launches
@@ -142,8 +145,8 @@ Audio switching note:
 - If neither is installed, the script logs a warning and continues.
 
 You can also run these via `python crt_master.py`:
-- Option `5` launches Resident Evil stack
-- Option `7` runs Resident Evil stack recovery restore
+- Option `5` launches Resident Evil (Manual Mode)
+- Option `6` opens the Tools submenu (includes RE recovery restore)
 
 ## Documentation Index
 

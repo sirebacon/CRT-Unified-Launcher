@@ -4,7 +4,12 @@ Date: 2026-02-22
 
 ## Purpose
 
-Automate a repeatable Resident Evil launch mode for CRT use, then cleanly restore system state afterward.
+Document the Resident Evil stack workflow and recovery commands for CRT use.
+
+Status (current):
+
+- Supported workflow: `manual --game re1|re2|re3` (guided manual mode)
+- Automatic mode (`start`) is on hold due to inconsistent behavior across display topology changes
 
 Script:
 
@@ -12,8 +17,8 @@ Script:
 
 Menu integration:
 
-- `crt_master.py` option `5` -> start Resident Evil stack
-- `crt_master.py` option `7` -> restore Resident Evil stack
+- `crt_master.py` option `5` -> Resident Evil (Manual Mode)
+- `crt_master.py` option `6` -> Tools submenu (includes RE recovery restore)
 
 ## Code Organization
 
@@ -36,9 +41,9 @@ Direct commands from project root:
 
 ```powershell
 python launch_resident_evil_stack.py inspect
-python launch_resident_evil_stack.py start --game re1
-python launch_resident_evil_stack.py start --game re2
-python launch_resident_evil_stack.py start --game re3
+python launch_resident_evil_stack.py manual --game re1
+python launch_resident_evil_stack.py manual --game re2
+python launch_resident_evil_stack.py manual --game re3
 python launch_resident_evil_stack.py restore
 ```
 
@@ -67,7 +72,19 @@ It reports:
 
 Use this first when changing display/audio names.
 
-## What `start --game reX` Does
+## What `manual --game reX` Does (Supported)
+
+Guided manual mode (current workflow):
+
+1. Ensures Moonlight is running.
+2. Opens the selected RE folder and Windows Display Settings.
+3. Prompts you to manually set resolutions and primary display.
+4. Verifies internal + CRT + Moonlight displays are attached (3-display check).
+5. Moves Moonlight to the CRT and switches audio to the CRT device.
+6. Waits for you to launch the game manually.
+7. On game exit or `Ctrl+C`, restores Moonlight position and audio (you restore primary display manually).
+
+## What `start --game reX` Does (Legacy / On Hold)
 
 Order of operations:
 

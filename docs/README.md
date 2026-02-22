@@ -22,6 +22,6 @@
 
 - `docs/runbooks/session-restore-recovery.md` - manual recovery if session config restore fails
 - `docs/runbooks/re-gog-crt-display.md` - RE1/RE2/RE3 GOG CRT display investigation and known limitations
-- `docs/runbooks/resident-evil-stack-automation.md` - automated RE stack start/restore flow, tokens, and adjustment points
-- `docs/runbooks/resident-evil-stack-code-flow.md` - detailed code-level execution flow for the RE stack (`launch_resident_evil_stack.py` + `session/*`)
+- `docs/runbooks/resident-evil-stack-automation.md` - RE stack operations runbook (manual mode is the current supported workflow; auto mode is on hold)
+- `docs/runbooks/resident-evil-stack-code-flow.md` - code-level RE stack flow and module layout (`launch_resident_evil_stack.py` + `session/*`), including legacy auto-mode notes
 - `docs/runbooks/ai-git-access.md` - repo-local Git/SSH setup for AI sessions

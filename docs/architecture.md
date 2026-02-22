@@ -1,8 +1,8 @@
-# Architecture
+﻿# Architecture
 
 ## Entry Point
 
-`crt_master.py` — interactive menu that dispatches to one of six modes.
+`crt_master.py` â€” interactive menu that dispatches to one of six modes.
 
 ## Gaming Session (Option 3)
 
@@ -10,13 +10,13 @@ The primary gaming workflow. All components live under `session/`.
 
 ```
 launch_session.py
-  └── session/manifest.py       load + validate gaming-manifest.json
-  └── session/patcher.py        backup → patch → restore on exit
-        └── session/patches/retroarch.py    retroarch.cfg key/value patching
-        └── session/patches/launchbox.py    Emulators.xml, BigBoxSettings.xml, Settings.xml patching
-  └── session/backup.py         numbered backup files, per-file restore failure logging
-  └── session/watcher.py        multi-target poll loop
-        └── session/window_utils.py   shared Win32 helpers
+  â””â”€â”€ session/manifest.py       load + validate gaming-manifest.json
+  â””â”€â”€ session/patcher.py        backup â†’ patch â†’ restore on exit
+        â””â”€â”€ session/patches/retroarch.py    retroarch.cfg key/value patching
+        â””â”€â”€ session/patches/launchbox.py    Emulators.xml, BigBoxSettings.xml, Settings.xml patching
+  â””â”€â”€ session/backup.py         numbered backup files, per-file restore failure logging
+  â””â”€â”€ session/watcher.py        multi-target poll loop
+        â””â”€â”€ session/window_utils.py   shared Win32 helpers
 ```
 
 ### Session Lifecycle
@@ -26,22 +26,22 @@ launch_session.py
    - **Fresh start**: apply patches, launch LaunchBox, run watcher.
    - **Reattach**: apply patches, skip launch (`proc=None`), run watcher.
 3. Watcher poll loop (every ~0.5 s):
-   - Check if LaunchBox/BigBox is still alive — exit if not.
+   - Check if LaunchBox/BigBox is still alive â€” exit if not.
    - Handle Ctrl+C (see below).
    - For each emulator watch target: find its window and snap it to its CRT rect.
 4. On exit: restore all patched configs, remove lockfile.
 
 ### Ctrl+C Behaviour
 
-- **Single Ctrl+C**: soft stop — moves all active emulator windows to the main screen and pauses tracking. Session stays alive; BigBox remains open for the next game launch.
-- **Second Ctrl+C within 8 seconds**: full shutdown — ends watcher, restores all configs.
+- **Single Ctrl+C**: soft stop â€” moves all active emulator windows to the main screen and pauses tracking. Session stays alive; BigBox remains open for the next game launch.
+- **Second Ctrl+C within 8 seconds**: full shutdown â€” ends watcher, restores all configs.
 - A paused emulator auto-resumes tracking when its process exits (game closed).
 
 ### Data Files
 
-- `profiles/gaming-manifest.json` — lists primary profile, watch profiles, and patches to apply
-- `profiles/launchbox-session.json` — primary process names and CRT rect (not tracked by watcher, stays on main screen)
-- `profiles/retroarch-session.json`, `dolphin-session.json`, `ppsspp-session.json`, `pcsx2-session.json` — emulator window tracking targets
+- `profiles/gaming-manifest.json` â€” lists primary profile, watch profiles, and patches to apply
+- `profiles/launchbox-session.json` â€” primary process names and CRT rect (not tracked by watcher, stays on main screen)
+- `profiles/retroarch-session.json`, `dolphin-session.json`, `ppsspp-session.json`, `pcsx2-session.json` â€” emulator window tracking targets
 
 ### Single-Session Guard
 
@@ -49,7 +49,7 @@ A lockfile at `.session.lock` (project root) prevents concurrent sessions. Alway
 
 ### Validation
 
-`validate_session.py --manifest profiles/gaming-manifest.json` — dry run: backs up, patches, and immediately restores. No permanent changes.
+`validate_session.py --manifest profiles/gaming-manifest.json` â€” dry run: backs up, patches, and immediately restores. No permanent changes.
 
 ---
 
@@ -75,29 +75,48 @@ See `docs/launchbox/generic-wrapper.md` for full CLI reference.
 
 ## LaunchBox Legacy Watcher (Option 2)
 
-`launchbox_crt_watcher.py` — older single-script watcher. Still functional but not the recommended path. Uses hardcoded process logic rather than profiles.
+`launchbox_crt_watcher.py` â€” older single-script watcher. Still functional but not the recommended path. Uses hardcoded process logic rather than profiles.
 
 ---
 
 ## Plex (Option 4)
 
-`launch_plex.py` — launches Plex Desktop, locks its window to the CRT rect, restores on Ctrl+C or exit.
+`launch_plex.py` â€” launches Plex Desktop, locks its window to the CRT rect, restores on Ctrl+C or exit.
 
 ---
 
-## Resident Evil Stack — Moonlight Streaming Mode (Options 5 / 7)
+## Resident Evil Stack â€” Moonlight Streaming Mode (Option 5 + Tools Recovery)
 
-`launch_resident_evil_stack.py` — orchestrates a Moonlight-based CRT streaming session for Resident Evil 1/2/3 (GOG).
+`launch_resident_evil_stack.py` â€” orchestrates a Moonlight-based CRT streaming session for Resident Evil 1/2/3 (GOG).
+
+Current status:
+
+- Supported workflow: guided manual mode (`manual --game re1|re2|re3`, menu option `5`)
+- Automatic mode (`start`) remains in the codebase but is on hold due to inconsistent behavior
 
 ```
-launch_resident_evil_stack.py      CLI + constants + orchestration
-  └── re_stack_config.json         All configurable tokens, paths, timeouts
-  └── session/display_api.py       Display enumeration, primary switching, refresh rate, CRT rect
-  └── session/vdd.py               Moonlight virtual display presence check + recovery re-attach
-  └── session/audio.py             Audio device switching (AudioDeviceCmdlets or nircmd)
-  └── session/moonlight.py         Moonlight process management, window placement, gameplay detection
-  └── session/window_utils.py      Shared Win32 window helpers (also used by gaming session)
+launch_resident_evil_stack.py      CLI + logging + dispatch
+  â””â”€â”€ re_stack_config.json         All configurable tokens, paths, timeouts
+  â””â”€â”€ session/re_manual_mode.py    Guided manual mode flow (supported)
+  â””â”€â”€ session/re_auto_mode.py      Automatic mode flow (on hold / legacy)
+  â””â”€â”€ session/re_preflight.py      Shared preflight helpers
+  â””â”€â”€ session/display_api.py       Display enumeration, primary switching, refresh rate, CRT rect
+  â””â”€â”€ session/vdd.py               Moonlight virtual display presence check + recovery re-attach
+  â””â”€â”€ session/audio.py             Audio device switching (AudioDeviceCmdlets or nircmd)
+  â””â”€â”€ session/moonlight.py         Moonlight process management and window placement
+  â””â”€â”€ session/window_utils.py      Shared Win32 window helpers (also used by gaming session)
 ```
+
+### Manual Mode Session Flow (Current)
+
+1. Ensure Moonlight is running.
+2. Open the selected RE folder and Windows Display Settings.
+3. User manually sets resolutions and primary display.
+4. Script verifies internal + CRT + Moonlight displays are attached.
+5. Script moves Moonlight to the CRT and switches audio to the CRT output.
+6. User launches the game manually.
+7. On game exit or Ctrl+C, script moves Moonlight back and restores audio.
+8. User restores primary display manually.
 
 ### Why Moonlight Virtual Display Is Set As Primary
 
@@ -108,13 +127,13 @@ Resident Evil (GOG) respects the Windows primary monitor when choosing where to 
 Setting a virtual display as primary via `ChangeDisplaySettingsEx CDS_SET_PRIMARY` returns `DISP_CHANGE_FAILED (-1)` for some virtual display drivers. The stack uses a two-tier approach:
 
 1. `ChangeDisplaySettingsEx` with three position variants (keep current position, zero position, no position change).
-2. If all three fail: `SetDisplayConfig` — repositions all source modes so the target lands at `(0, 0)`, which is how Windows determines the primary monitor.
+2. If all three fail: `SetDisplayConfig` â€” repositions all source modes so the target lands at `(0, 0)`, which is how Windows determines the primary monitor.
 
 After the primary switch, the Windows virtual desktop coordinate space shifts (SudoMaker is now at 0,0). The Moonlight window must be explicitly moved to the internal display immediately, or it drifts into virtual display space and becomes invisible.
 
 ### VDD Lifecycle
 
-The SudoMaker VDD is an IddCx-based virtual display driver managed by Apollo (the streaming host). IddCx drivers cannot be re-attached via standard Windows display APIs (`SetDisplayConfig SDC_TOPOLOGY_EXTEND` or `ChangeDisplaySettingsEx`) once soft-disconnected — these return error 87 or `DISP_CHANGE_BADMODE` respectively.
+The SudoMaker VDD is an IddCx-based virtual display driver managed by Apollo (the streaming host). IddCx drivers cannot be re-attached via standard Windows display APIs (`SetDisplayConfig SDC_TOPOLOGY_EXTEND` or `ChangeDisplaySettingsEx`) once soft-disconnected â€” these return error 87 or `DISP_CHANGE_BADMODE` respectively.
 
 - **On `start`**: wait for VDD to appear (Apollo should have it attached). If soft-disconnected, attempt recovery by enumerating driver-supported modes via index (`EnumDisplaySettings(dev, 0)`, `(dev, 1)`, ...) and re-enabling with `ChangeDisplaySettingsEx`. Poll up to `VDD_ATTACH_TIMEOUT_SECONDS`.
 - **On `restore`**: VDD is left attached. Only primary display and audio are restored. Unplugging the VDD is not done because re-attachment requires Apollo to restart if recovery mode fails.
@@ -136,7 +155,7 @@ The VDD stays attached between sessions as a harmless secondary display.
 
 Moonlight itself stays windowed (has a title bar) even when the game inside it goes fullscreen. WS_CAPTION detection is therefore unreliable as a CRT-move trigger.
 
-Instead, each profile JSON declares a `gameplay_title` — a window title substring that appears only when the actual game window is open, not during the launcher/config screen:
+Instead, each profile JSON declares a `gameplay_title` â€” a window title substring that appears only when the actual game window is open, not during the launcher/config screen:
 
 | Profile | `gameplay_title` | Distinguishes from |
 |---|---|---|
@@ -169,7 +188,8 @@ See `docs/runbooks/resident-evil-stack-code-flow.md` for detailed function-level
 
 ## Shared Utilities
 
-- `session/window_utils.py` — all Win32 window operations used across the codebase
-- `crt_config.json` — global coordinates, executable paths, polling cadence, restore rect
-- `wrapper_stop_enforce.flag` — written by session watcher on soft stop or shutdown to signal wrapper scripts to disengage
+- `session/window_utils.py` â€” all Win32 window operations used across the codebase
+- `crt_config.json` â€” global coordinates, executable paths, polling cadence, restore rect
+- `wrapper_stop_enforce.flag` â€” written by session watcher on soft stop or shutdown to signal wrapper scripts to disengage
+
 
