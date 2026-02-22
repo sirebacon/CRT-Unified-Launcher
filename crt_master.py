@@ -4,6 +4,7 @@ import sys
 
 from default_restore import restore_defaults_from_backup
 from launchbox_session_mode import apply_crt_session_mode, restore_session_mode
+from session.re_state import apply_restore_system_state
 
 LAUNCHBOX_EXE = r"D:\Emulators\LaunchBox\LaunchBox.exe"
 LAUNCHBOX_DIR = r"D:\Emulators\LaunchBox"
@@ -132,6 +133,16 @@ def run_resident_evil_stack() -> None:
         pass
 
 
+def restore_display_state() -> None:
+    print("\nRestoring primary display to Intel UHD and CRT refresh to 60 Hz...")
+    ok = apply_restore_system_state()
+    if ok:
+        print("Display and audio restored.")
+    else:
+        print("WARNING: Primary display restore may not have completed; check display settings.")
+    input("\nPress Enter to return to menu...")
+
+
 def restore_resident_evil_stack() -> None:
     if not os.path.exists(RE_STACK_LAUNCHER):
         print(f"Resident Evil stack launcher not found: {RE_STACK_LAUNCHER}")
@@ -155,11 +166,12 @@ def main():
         print(" 5. [GAMING] Launch Resident Evil Stack")
         print(" 6. [TOOLS]  Restore Default Settings")
         print(" 7. [TOOLS]  Recover Resident Evil Stack")
-        print(" 8. [EXIT]   Close Menu")
+        print(" 8. [TOOLS]  Restore Display & Audio")
+        print(" 9. [EXIT]   Close Menu")
         print("========================================")
 
         try:
-            choice = input("\nSelect an option (1-8): ")
+            choice = input("\nSelect an option (1-9): ")
             if choice == '1':
                 run_retroarch_mode()
             elif choice == '2':
@@ -205,6 +217,8 @@ def main():
             elif choice == '7':
                 restore_resident_evil_stack()
             elif choice == '8':
+                restore_display_state()
+            elif choice == '9':
                 break
         except KeyboardInterrupt:
             print("\nInterrupted. Returning to menu...")

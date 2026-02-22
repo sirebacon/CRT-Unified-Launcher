@@ -120,6 +120,63 @@ def get_crt_display_rect(crt_tokens: List[str]) -> Optional[Tuple[int, int, int,
 
 
 # ---------------------------------------------------------------------------
+# Full display mode (resolution + refresh) — save / restore
+# ---------------------------------------------------------------------------
+
+def get_display_mode(display_token: str) -> Optional[dict]:
+    """Return the current mode for a display as {device_name, width, height, hz}.
+
+    Returns None if the display cannot be found or queried.
+    """
+    target = find_display_by_token(display_token)
+    if not target or win32api is None or win32con is None:
+        return None
+    try:
+        dm = win32api.EnumDisplaySettings(target["device_name"], win32con.ENUM_CURRENT_SETTINGS)
+        return {
+            "device_name": target["device_name"],
+            "width": int(dm.PelsWidth),
+            "height": int(dm.PelsHeight),
+            "hz": int(dm.DisplayFrequency),
+        }
+    except Exception as e:
+        print(f"[re-stack] Could not read display mode for {target['device_name']}: {e}")
+        return None
+
+
+def restore_display_mode(saved: dict) -> bool:
+    """Apply a previously saved display mode dict (from get_display_mode).
+
+    Sets width, height, and refresh rate together so the mode is valid.
+    Returns True on success.
+    """
+    if not saved or win32api is None or win32con is None:
+        return False
+    dev = saved.get("device_name", "")
+    w, h, hz = saved.get("width"), saved.get("height"), saved.get("hz")
+    if not dev or not w or not h or not hz:
+        return False
+    try:
+        dm = win32api.EnumDisplaySettings(dev, win32con.ENUM_CURRENT_SETTINGS)
+        dm.PelsWidth = int(w)
+        dm.PelsHeight = int(h)
+        dm.DisplayFrequency = int(hz)
+        dm.Fields |= win32con.DM_PELSWIDTH | win32con.DM_PELSHEIGHT | win32con.DM_DISPLAYFREQUENCY
+        # Try dynamic-only apply first (flag=0); CDS_UPDATEREGISTRY is rejected by some
+        # NVIDIA hybrid-GPU drivers (returns DISP_CHANGE_FAILED=-1) even for valid modes.
+        for flags in (0, win32con.CDS_UPDATEREGISTRY):
+            rc = win32api.ChangeDisplaySettingsEx(dev, dm, flags)
+            if rc == win32con.DISP_CHANGE_SUCCESSFUL:
+                print(f"[re-stack] CRT mode restored: {w}x{h}@{hz}Hz on {dev}.")
+                return True
+        print(f"[re-stack] CRT mode restore failed on {dev} (code {rc}).")
+        return False
+    except Exception as e:
+        print(f"[re-stack] CRT mode restore error on {dev}: {e}")
+        return False
+
+
+# ---------------------------------------------------------------------------
 # Refresh rate
 # ---------------------------------------------------------------------------
 
@@ -140,10 +197,12 @@ def set_display_refresh_best_effort(display_token: str, refresh_hz: int) -> bool
             return True
         dm.DisplayFrequency = int(refresh_hz)
         dm.Fields |= win32con.DM_DISPLAYFREQUENCY
-        rc = win32api.ChangeDisplaySettingsEx(dev_name, dm, win32con.CDS_UPDATEREGISTRY)
-        if rc == win32con.DISP_CHANGE_SUCCESSFUL:
-            print(f"[re-stack] Refresh corrected: {current} Hz -> {refresh_hz} Hz on {dev_name}.")
-            return True
+        # Try dynamic-only apply first; CDS_UPDATEREGISTRY is rejected by some NVIDIA drivers.
+        for flags in (0, win32con.CDS_UPDATEREGISTRY):
+            rc = win32api.ChangeDisplaySettingsEx(dev_name, dm, flags)
+            if rc == win32con.DISP_CHANGE_SUCCESSFUL:
+                print(f"[re-stack] Refresh corrected: {current} Hz -> {refresh_hz} Hz on {dev_name}.")
+                return True
         print(
             f"[re-stack] Failed to correct refresh from {current} Hz to {refresh_hz} Hz "
             f"on {dev_name} (code {rc})."

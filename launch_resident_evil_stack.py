@@ -13,18 +13,17 @@ import os
 import sys
 import time
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from default_restore import restore_defaults_from_backup
-from session.audio import audio_tool_status, set_default_audio_best_effort
+from session.audio import audio_tool_status
 from session.display_api import (
     current_primary_device_name,
     current_primary_display,
     enumerate_attached_displays,
-    find_display_by_device_name,
     find_display_by_token,
+    get_display_mode,
     set_display_refresh_best_effort,
-    set_primary_display_entry,
     set_primary_display_verified,
 )
 from session.moonlight import (
@@ -32,98 +31,37 @@ from session.moonlight import (
     is_gameplay_window_visible,
     is_moonlight_fullscreen,
     move_moonlight_to_crt,
-    move_moonlight_to_internal,
 )
+from session.moonlight_adjuster import adjust_moonlight, capture_moonlight_pos
+from session.re_config import (
+    CRT_CONFIG_PATH,
+    CRT_DISPLAY_TOKEN,
+    CRT_TARGET_REFRESH_HZ,
+    FULLSCREEN_CONFIRM_SECONDS,
+    GAME_PROFILES,
+    MOONLIGHT_CRT_RECT,
+    MOONLIGHT_DIR,
+    MOONLIGHT_EXE,
+    MOONLIGHT_IDLE_RECT,
+    RE_AUDIO_DEVICE_TOKEN,
+    RE_PRIMARY_DISPLAY_TOKEN,
+    RE_STACK_CONFIG_PATH,
+    RE_STACK_LOG_PATH,
+    REQUIRED_DISPLAY_GROUPS,
+    RESTORE_AUDIO_DEVICE_TOKEN,
+    RESTORE_PRIMARY_DISPLAY_TOKEN,
+    STATE_PATH,
+    STOP_FLAG,
+    VDD_ATTACH_TIMEOUT_SECONDS,
+)
+from session.re_game import find_wrapper_pids, is_re_game_running
+from session.re_state import apply_re_mode_system_state, apply_restore_system_state
 from session.vdd import plug_vdd_and_wait
 
 try:
     import psutil
 except Exception:
     psutil = None
-
-
-PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
-STOP_FLAG = os.path.join(PROJECT_ROOT, "wrapper_stop_enforce.flag")
-STATE_PATH = os.path.join(PROJECT_ROOT, "runtime", "re_stack_state.json")
-RE_STACK_LOG_PATH = os.path.join(PROJECT_ROOT, "runtime", "re_stack.log")
-CRT_CONFIG_PATH = os.path.join(PROJECT_ROOT, "crt_config.json")
-RE_STACK_CONFIG_PATH = os.path.join(PROJECT_ROOT, "re_stack_config.json")
-
-
-def _load_config() -> dict:
-    try:
-        with open(RE_STACK_CONFIG_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
-        print(f"[re-stack] Config not found: {RE_STACK_CONFIG_PATH} — using built-in defaults.")
-        return {}
-    except Exception as e:
-        print(f"[re-stack] Config load error: {e} — using built-in defaults.")
-        return {}
-
-
-_cfg = _load_config()
-_display_cfg = _cfg.get("display", {})
-_audio_cfg = _cfg.get("audio", {})
-_profiles_cfg = _cfg.get("game_profiles", {})
-_moonlight_cfg = _cfg.get("moonlight", {})
-
-MOONLIGHT_DIR: str = _cfg.get(
-    "moonlight_dir", r"D:\Emulators\MoonlightPortable-x64-6.1.0"
-)
-MOONLIGHT_EXE: str = os.path.join(MOONLIGHT_DIR, "Moonlight.exe")
-
-
-def _parse_rect_cfg(d: Optional[dict]) -> Optional[tuple]:
-    if not d:
-        return None
-    try:
-        return (int(d["x"]), int(d["y"]), int(d["w"]), int(d["h"]))
-    except (KeyError, TypeError, ValueError):
-        return None
-
-
-MOONLIGHT_IDLE_RECT: Optional[tuple] = _parse_rect_cfg(_moonlight_cfg.get("idle_rect"))
-MOONLIGHT_CRT_RECT: Optional[tuple] = _parse_rect_cfg(_moonlight_cfg.get("crt_rect"))
-
-VDD_ATTACH_TIMEOUT_SECONDS: int = int(_cfg.get("vdd_attach_timeout_seconds", 15))
-FULLSCREEN_CONFIRM_SECONDS: float = float(_cfg.get("fullscreen_confirm_seconds", 2.0))
-
-RE_PRIMARY_DISPLAY_TOKEN: str = _display_cfg.get(
-    "re_primary_token", "SudoMaker Virtual Display"
-)
-CRT_DISPLAY_TOKEN: str = _display_cfg.get(
-    "crt_token", "NVIDIA GeForce RTX 4090 Laptop GPU"
-)
-CRT_TARGET_REFRESH_HZ: int = int(_display_cfg.get("crt_target_refresh_hz", 60))
-RESTORE_PRIMARY_DISPLAY_TOKEN: str = _display_cfg.get(
-    "restore_primary_token", "Intel(R) UHD Graphics"
-)
-REQUIRED_DISPLAY_GROUPS: Dict[str, List[str]] = _display_cfg.get(
-    "required_groups",
-    {
-        "internal_display": ["Internal Display", "Intel(R) UHD Graphics"],
-        "crt_display": ["CP-1262HE", "NVIDIA GeForce RTX 4090 Laptop GPU"],
-        "moonlight_display": ["SudoMaker Virtual Display"],
-    },
-)
-
-RE_AUDIO_DEVICE_TOKEN: str = _audio_cfg.get(
-    "re_device_token", "CP-1262HE (NVIDIA High Definition Audio)"
-)
-RESTORE_AUDIO_DEVICE_TOKEN: str = _audio_cfg.get(
-    "restore_device_token", "Speakers (Realtek(R) Audio)"
-)
-
-_default_profiles = {
-    "re1": "integrations/launchbox/wrapper/profiles/re1-gog.json",
-    "re2": "integrations/launchbox/wrapper/profiles/re2-gog.json",
-    "re3": "integrations/launchbox/wrapper/profiles/re3-gog.json",
-}
-GAME_PROFILES: Dict[str, str] = {
-    k: (v if os.path.isabs(v) else os.path.join(PROJECT_ROOT, v))
-    for k, v in (_profiles_cfg or _default_profiles).items()
-}
 
 
 # ---------------------------------------------------------------------------
@@ -196,27 +134,6 @@ def _enable_persistent_logging() -> None:
 
 
 # ---------------------------------------------------------------------------
-# State file
-# ---------------------------------------------------------------------------
-
-def _write_state(state: dict) -> None:
-    try:
-        os.makedirs(os.path.dirname(STATE_PATH), exist_ok=True)
-        with open(STATE_PATH, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2)
-    except Exception:
-        pass
-
-
-def _read_state() -> dict:
-    try:
-        with open(STATE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-
-# ---------------------------------------------------------------------------
 # Preflight
 # ---------------------------------------------------------------------------
 
@@ -243,96 +160,6 @@ def _ensure_required_displays() -> bool:
         return False
 
     return True
-
-
-# ---------------------------------------------------------------------------
-# System state
-# ---------------------------------------------------------------------------
-
-def _apply_re_mode_system_state() -> None:
-    """Save restore state, set CRT refresh, and switch audio.
-
-    The primary display switch is intentionally deferred until the gameplay
-    window is confirmed in the enforcement loop.  This keeps the configuration
-    screen on the physical Intel UHD display so the user can see and interact
-    with it without Moonlight streaming being active.
-    """
-    primary = current_primary_display()
-    _write_state({"previous_primary_device_name": primary.get("device_name", "")})
-    set_display_refresh_best_effort(CRT_DISPLAY_TOKEN, CRT_TARGET_REFRESH_HZ)
-    set_default_audio_best_effort(RE_AUDIO_DEVICE_TOKEN)
-
-
-def _apply_restore_system_state() -> bool:
-    state = _read_state()
-    restored_by_state = False
-    prev_device = str(state.get("previous_primary_device_name", "")).strip()
-    if prev_device:
-        prev = find_display_by_device_name(prev_device)
-        if prev and set_primary_display_entry(prev):
-            print(f"[re-stack] Primary display restored to previous device: {prev_device}")
-            restored_by_state = True
-
-    ok_display = restored_by_state or set_primary_display_verified(RESTORE_PRIMARY_DISPLAY_TOKEN)
-    set_display_refresh_best_effort(CRT_DISPLAY_TOKEN, CRT_TARGET_REFRESH_HZ)
-    set_default_audio_best_effort(RESTORE_AUDIO_DEVICE_TOKEN)
-    # The SudoMaker VDD is an IddCx driver managed by Apollo — it cannot be
-    # re-attached via standard Windows display APIs once detached. Leave it
-    # attached between sessions; only the primary display and audio are restored.
-    move_moonlight_to_internal(
-        REQUIRED_DISPLAY_GROUPS["internal_display"],
-        MOONLIGHT_DIR,
-        idle_rect=MOONLIGHT_IDLE_RECT,
-    )
-    return ok_display
-
-
-# ---------------------------------------------------------------------------
-# Wrapper process helpers
-# ---------------------------------------------------------------------------
-
-def _find_wrapper_pids() -> List[int]:
-    if psutil is None:
-        return []
-    pids: List[int] = []
-    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
-        try:
-            cmdline = " ".join(proc.info.get("cmdline") or []).lower()
-            if "launchbox_generic_wrapper.py" in cmdline:
-                pids.append(int(proc.info["pid"]))
-        except Exception:
-            continue
-    return pids
-
-
-def _re_process_names() -> List[str]:
-    """Return the lowercase process names declared across all loaded game profiles."""
-    names: List[str] = []
-    for profile_path in GAME_PROFILES.values():
-        try:
-            with open(profile_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            for name in data.get("process_name", []):
-                names.append(str(name).lower())
-        except Exception:
-            continue
-    return names
-
-
-def _is_re_game_running() -> bool:
-    """Return True if any RE game process from the known profiles is currently running."""
-    if psutil is None:
-        return False
-    known = set(_re_process_names())
-    if not known:
-        return False
-    for proc in psutil.process_iter(["name"]):
-        try:
-            if (proc.info.get("name") or "").lower() in known:
-                return True
-        except Exception:
-            continue
-    return False
 
 
 # ---------------------------------------------------------------------------
@@ -365,7 +192,7 @@ def start_stack(game: str) -> int:
     state_applied = False
 
     try:
-        if _is_re_game_running():
+        if is_re_game_running():
             print("[re-stack] RE game is already running; aborting.")
             return 1
 
@@ -387,7 +214,7 @@ def start_stack(game: str) -> int:
         # Save state, set CRT refresh, switch audio.  Primary switch is deferred
         # until the gameplay window is confirmed so the config GUI remains on the
         # physical Intel UHD display and is visible without Moonlight streaming.
-        _apply_re_mode_system_state()
+        apply_re_mode_system_state()
         state_applied = True
 
         # Load gameplay/config window title hints from the profile.
@@ -517,7 +344,7 @@ def start_stack(game: str) -> int:
                         last_detection_log = now
             else:
                 # --- Game is running on CRT; watch for exit ---
-                is_running = _is_re_game_running()
+                is_running = is_re_game_running()
                 if is_running:
                     game_was_running = True
                 elif game_was_running:
@@ -549,7 +376,7 @@ def restore_stack() -> int:
         pass
 
     stopped: List[int] = []
-    pids = _find_wrapper_pids()
+    pids = find_wrapper_pids()
     for pid in pids:
         try:
             proc = psutil.Process(pid) if psutil is not None else None
@@ -581,7 +408,7 @@ def restore_stack() -> int:
     except Exception:
         pass
 
-    state_ok = _apply_restore_system_state()
+    state_ok = apply_restore_system_state()
     return 0 if (ok and state_ok) else 1
 
 
@@ -619,145 +446,6 @@ def inspect_state() -> int:
     print(f"[re-stack] Audio switch tool: {tool}")
     print(f"[re-stack] RE audio token: {RE_AUDIO_DEVICE_TOKEN}")
     print(f"[re-stack] Restore audio token: {RESTORE_AUDIO_DEVICE_TOKEN}")
-    return 0
-
-
-def _write_moonlight_rect(config_key: str, x: int, y: int, w: int, h: int) -> bool:
-    """Write a Moonlight rect to re_stack_config.json. Returns True on success."""
-    try:
-        with open(RE_STACK_CONFIG_PATH, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-    except Exception as e:
-        print(f"[re-stack] Could not read config: {e}")
-        return False
-    if "moonlight" not in cfg:
-        cfg["moonlight"] = {}
-    cfg["moonlight"][config_key] = {"x": x, "y": y, "w": w, "h": h}
-    try:
-        with open(RE_STACK_CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2)
-        return True
-    except Exception as e:
-        print(f"[re-stack] Could not write config: {e}")
-        return False
-
-
-def capture_moonlight_pos(config_key: str) -> int:
-    """Capture the current Moonlight window rect and write it to re_stack_config.json."""
-    from session.window_utils import find_window, get_rect
-    import win32gui
-    hwnd = find_window(None, [], ["moonlight"])
-    if hwnd is None:
-        print("[re-stack] No Moonlight window found — make sure Moonlight is open.")
-        return 1
-    x, y, w, h = get_rect(hwnd)
-    title = win32gui.GetWindowText(hwnd)
-    print(f"[re-stack] Moonlight window: {title!r}  x={x}, y={y}, w={w}, h={h}")
-    label = "idle (restore)" if config_key == "idle_rect" else "CRT"
-    if _write_moonlight_rect(config_key, x, y, w, h):
-        print(f"[re-stack] Saved as Moonlight {label} rect in re_stack_config.json.")
-        return 0
-    return 1
-
-
-def adjust_moonlight() -> int:
-    """Interactive keyboard-driven Moonlight window position/size adjuster.
-
-    Move and resize the Moonlight window live, then save the result to config.
-
-    Controls
-    --------
-    Arrow keys          Move left / right / up / down
-    [ / ]               Narrower / wider  (decrease/increase width)
-    - / =               Shorter / taller  (decrease/increase height)
-    1 – 9               Step size: 1, 5, 10, 25, 50, 100, 200, 500, 1000 px
-    i                   Save current position as idle (restore) rect
-    c                   Save current position as CRT rect
-    q  or  Esc          Quit without saving
-    """
-    import msvcrt
-    import win32gui
-    from session.window_utils import find_window, get_rect, move_window
-
-    STEPS = [1, 5, 10, 25, 50, 100, 200, 500, 1000]
-    step_idx = 2  # default 10 px
-
-    hwnd = find_window(None, [], ["moonlight"])
-    if hwnd is None:
-        print("No Moonlight window found — make sure Moonlight is open.")
-        return 1
-
-    x, y, w, h = get_rect(hwnd)
-    title = win32gui.GetWindowText(hwnd)
-
-    print(f"=== Moonlight Window Adjuster  ({title}) ===")
-    print("  Arrow keys   move x/y          [ / ]   narrower / wider")
-    print("  - / =        shorter / taller  1-9     step size")
-    print("  i  save idle rect              c       save CRT rect")
-    print("  q / Esc      quit without saving")
-    print()
-
-    def _show():
-        step = STEPS[step_idx]
-        print(
-            f"\r  x={x:6d}  y={y:6d}  w={w:6d}  h={h:6d}  step={step:4d}px    ",
-            end="",
-            flush=True,
-        )
-
-    def _apply():
-        try:
-            move_window(hwnd, x, y, w, h, strip_caption=False)
-        except Exception as e:
-            print(f"\n  move failed: {e}")
-
-    _show()
-
-    while True:
-        ch = msvcrt.getch()
-
-        if ch == b"\xe0":
-            # Extended key — read the second byte
-            ch2 = msvcrt.getch()
-            step = STEPS[step_idx]
-            if ch2 == b"H":    y -= step                            # up
-            elif ch2 == b"P":  y += step                            # down
-            elif ch2 == b"K":  x -= step                            # left
-            elif ch2 == b"M":  x += step                            # right
-            else:
-                continue
-            _apply()
-            _show()
-
-        elif ch == b"[":
-            w = max(1, w - STEPS[step_idx]); _apply(); _show()
-        elif ch == b"]":
-            w += STEPS[step_idx]; _apply(); _show()
-        elif ch == b"-":
-            h = max(1, h - STEPS[step_idx]); _apply(); _show()
-        elif ch in (b"=", b"+"):
-            h += STEPS[step_idx]; _apply(); _show()
-
-        elif ch in b"123456789":
-            step_idx = int(ch) - 1
-            _show()
-
-        elif ch in (b"i", b"I"):
-            print()
-            if _write_moonlight_rect("idle_rect", x, y, w, h):
-                print(f"  Saved idle rect: x={x}, y={y}, w={w}, h={h}")
-            _show()
-
-        elif ch in (b"c", b"C"):
-            print()
-            if _write_moonlight_rect("crt_rect", x, y, w, h):
-                print(f"  Saved CRT rect:  x={x}, y={y}, w={w}, h={h}")
-            _show()
-
-        elif ch in (b"q", b"Q", b"\x1b"):
-            print("\n  Quit — no changes saved.")
-            break
-
     return 0
 
 
