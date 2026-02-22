@@ -77,6 +77,19 @@ Session behavior:
 5. Full stop with second `Ctrl+C` within 8 seconds.
 6. Confirm configs restore cleanly.
 
+## CRT Baseline Resolution
+
+Default accuracy baseline for CRT play:
+
+- Host/game output: `1280x960 @ 60` (4:3)
+- Moonlight/client output: `1280x960 @ 60` (4:3) when available
+- Goal: preserve original 4:3 geometry without stretch
+
+Known behavior:
+
+- `1280x800` (16:10) can hide a left-edge bar/cutoff in some states, but it is not aspect-accurate for 4:3 content.
+- Prefer geometry/timing adjustments (OSSC/CRT position and scaling mode) over switching to `1280x800` for long-term setup.
+
 ## Troubleshooting
 
 - If restore fails, use:
@@ -84,6 +97,53 @@ Session behavior:
 - If line/edge artifacts appear, use:
   - `docs/video-stack/line-artifact-suspicions.md`
   - per-core RetroArch overrides
+
+## Resident Evil Stack Automation
+
+You can automate GOG RE launches (RE1/RE2/RE3) with the existing wrapper profiles:
+
+```powershell
+python launch_resident_evil_stack.py start --game re1
+python launch_resident_evil_stack.py start --game re2
+python launch_resident_evil_stack.py start --game re3
+python launch_resident_evil_stack.py inspect
+```
+
+Restore/reverse helper:
+
+```powershell
+python launch_resident_evil_stack.py restore
+```
+
+Auto-restore behavior:
+- `start --game reX` now auto-runs restore when the game process exits, crashes, or you press `Ctrl+C`.
+- Manual `restore` remains available as a recovery command.
+
+RE start preflight requirements:
+- Moonlight must be running from `D:\Emulators\MoonlightPortable-x64-6.1.0` (script auto-starts it if needed).
+- Required display set must be present or launch is aborted:
+  - internal display (`Internal Display` or `Intel(R) UHD Graphics`)
+  - CRT display (`CP-1262HE` or `NVIDIA GeForce RTX 4090 Laptop GPU`)
+  - virtual display (`SudoMaker Virtual Display`)
+- Moonlight window is moved to CRT usable rect from `crt_config.json` (`launcher_integration.x/y/w/h`) before RE launch.
+
+Resident Evil mode system state behavior:
+- On `start`: attempts to set primary display to token `SudoMaker Virtual Display`
+- On `start`: attempts to set default playback audio to token `CP-1262HE (NVIDIA High Definition Audio)`
+- On `restore`: attempts to set primary display back to token `Internal Display`
+- On `restore`: attempts to set default playback audio back to token `Speakers (Realtek(R) Audio)`
+
+This restore command:
+- stops active generic-wrapper enforcement for RE stack launches
+- runs default config restore from latest backup files (same behavior as Tools restore)
+
+Audio switching note:
+- Automatic audio switching uses `AudioDeviceCmdlets` (preferred) or `nircmd.exe` if available.
+- If neither is installed, the script logs a warning and continues.
+
+You can also run these via `python crt_master.py`:
+- Option `5` launches Resident Evil stack
+- Option `7` runs Resident Evil stack recovery restore
 
 ## Documentation Index
 

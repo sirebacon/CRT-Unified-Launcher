@@ -11,6 +11,7 @@ GENERIC_LAUNCHER = "launch_generic.py"
 SESSION_LAUNCHER = "launch_session.py"
 RETROARCH_SESSION_PROFILE = os.path.join("profiles", "retroarch-session.json")
 GAMING_MANIFEST = os.path.join("profiles", "gaming-manifest.json")
+RE_STACK_LAUNCHER = "launch_resident_evil_stack.py"
 
 
 def stop_plex_lockers() -> None:
@@ -102,6 +103,45 @@ def run_plex_mode() -> None:
         force_restore_plex()
 
 
+def run_resident_evil_stack() -> None:
+    if not os.path.exists(RE_STACK_LAUNCHER):
+        print(f"Resident Evil stack launcher not found: {RE_STACK_LAUNCHER}")
+        input("Press Enter to return to menu...")
+        return
+
+    print("\nSelect Resident Evil game:")
+    print(" 1. RE1 (GOG)")
+    print(" 2. RE2 (GOG)")
+    print(" 3. RE3 (GOG)")
+    sel = input("Choice (1-3): ").strip()
+    mapping = {"1": "re1", "2": "re2", "3": "re3"}
+    game = mapping.get(sel)
+    if not game:
+        print("Invalid selection.")
+        input("Press Enter to return to menu...")
+        return
+
+    debug = input("Enable debug logs? (y/N): ").strip().lower() == "y"
+    cmd = [sys.executable, RE_STACK_LAUNCHER, "start", "--game", game]
+    if debug:
+        cmd.append("--debug")
+
+    try:
+        subprocess.run(cmd)
+    except KeyboardInterrupt:
+        pass
+
+
+def restore_resident_evil_stack() -> None:
+    if not os.path.exists(RE_STACK_LAUNCHER):
+        print(f"Resident Evil stack launcher not found: {RE_STACK_LAUNCHER}")
+        input("Press Enter to return to menu...")
+        return
+
+    subprocess.run([sys.executable, RE_STACK_LAUNCHER, "restore"])
+    input("\nPress Enter to return to menu...")
+
+
 def main():
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -112,12 +152,14 @@ def main():
         print(" 2. [GAMING] Launch LaunchBox CRT Watcher")
         print(" 3. [GAMING] Launch LaunchBox (Session)")
         print(" 4. [CINEMA] Launch Plex")
-        print(" 5. [TOOLS]  Restore Default Settings")
-        print(" 6. [EXIT]   Close Menu")
+        print(" 5. [GAMING] Launch Resident Evil Stack")
+        print(" 6. [TOOLS]  Restore Default Settings")
+        print(" 7. [TOOLS]  Recover Resident Evil Stack")
+        print(" 8. [EXIT]   Close Menu")
         print("========================================")
 
         try:
-            choice = input("\nSelect an option (1-6): ")
+            choice = input("\nSelect an option (1-8): ")
             if choice == '1':
                 run_retroarch_mode()
             elif choice == '2':
@@ -151,6 +193,8 @@ def main():
             elif choice == '4':
                 run_plex_mode()
             elif choice == '5':
+                run_resident_evil_stack()
+            elif choice == '6':
                 ok, msg, restored = restore_defaults_from_backup()
                 print(msg)
                 if restored:
@@ -158,7 +202,9 @@ def main():
                     for item in restored:
                         print(f" - {item}")
                 input("\nPress Enter to return to menu...")
-            elif choice == '6':
+            elif choice == '7':
+                restore_resident_evil_stack()
+            elif choice == '8':
                 break
         except KeyboardInterrupt:
             print("\nInterrupted. Returning to menu...")
