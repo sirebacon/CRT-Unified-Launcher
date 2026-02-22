@@ -37,6 +37,21 @@ from session.vdd import plug_vdd_and_wait
 from session.window_utils import find_window, get_rect, move_window
 
 
+def _manual_header(title: str) -> None:
+    print()
+    print("=" * 54)
+    print(f"[re-stack][manual] {title}")
+    print("=" * 54)
+
+
+def _manual_step(n: int, text: str) -> None:
+    print(f"[re-stack][manual] {n}. {text}")
+
+
+def _manual_note(text: str) -> None:
+    print(f"[re-stack][manual] {text}")
+
+
 def _open_re_game_folder(profile_path: str) -> None:
     try:
         with open(profile_path, "r", encoding="utf-8") as f:
@@ -253,17 +268,17 @@ def _move_moonlight_back_to_internal_manual(
 
 
 def _print_manual_mode_checklist(game: str) -> None:
-    print(f"[re-stack] Manual RE mode ready for {game}.")
-    print("[re-stack] Follow these steps before continuing:")
-    print(" 1. The RE game folder should already be open in Explorer.")
-    print(" 2. In Windows Display Settings, confirm all 3 displays are attached.")
-    print(" 3. Set/verify resolutions for Internal, CRT, and SudoMaker displays.")
-    print(" 4. Set the PRIMARY display manually (you will handle this).")
-    print(" 5. Return here and press Enter so I can verify monitor presence.")
-    print(" 6. I will move Moonlight to the CRT screen for you.")
-    print(" 7. Move the RE folder window onto the Moonlight screen and launch the game manually.")
-    print(" 8. When the game exits, I will move Moonlight back to the Internal Display.")
-    print("    (You will change primary display back manually.)")
+    _manual_header(f"Manual RE Mode Ready ({game.upper()})")
+    _manual_note("Do the setup below, then come back here and press Enter.")
+    _manual_step(1, "Keep the RE game folder open in Explorer (already opened for you).")
+    _manual_step(2, "In Windows Display Settings, confirm there are 3 displays.")
+    _manual_step(3, "Set/verify resolutions for Internal, CRT, and SudoMaker.")
+    _manual_step(4, "Set the PRIMARY display manually.")
+    _manual_step(5, "Press Enter here. I will verify displays and move Moonlight to CRT.")
+    _manual_step(6, "Move the RE folder window onto the Moonlight screen.")
+    _manual_step(7, "Launch the game manually from that folder.")
+    _manual_note("When the game exits (or you press Ctrl+C), I will move Moonlight back.")
+    _manual_note("You still change the primary display back manually.")
 
 
 def manual_stack(game: str) -> int:
@@ -306,7 +321,6 @@ def manual_stack(game: str) -> int:
 
         open_windows_display_settings()
         _move_re_folder_window_to_internal(profile)
-        print()
         _print_manual_mode_checklist(game)
         print()
         input("[re-stack] Press Enter after you have finished the manual display setup steps...")
@@ -323,7 +337,8 @@ def manual_stack(game: str) -> int:
         print("[re-stack] Verified 3 displays and required display matches.")
         if manual_return_rect is None:
             manual_return_rect = _capture_moonlight_rect_for_manual_restore()
-        print("[re-stack] Moving Moonlight to CRT display...")
+        _manual_header("Manual Setup Confirmed")
+        _manual_note("Display verification passed. Moving Moonlight to CRT now...")
         moved = move_moonlight_to_crt(
             REQUIRED_DISPLAY_GROUPS["crt_display"],
             MOONLIGHT_DIR,
@@ -343,10 +358,11 @@ def manual_stack(game: str) -> int:
             print("[re-stack] RE folder window does not appear to be on the Moonlight display yet.")
         else:
             print("[re-stack] Could not verify RE folder window placement on Moonlight display.")
-        print("[re-stack] Move the already-open RE folder window to the Moonlight screen.")
-        print("[re-stack] Start the game manually from that folder when ready.")
+        _manual_header("Your Turn")
+        _manual_step(1, "Move the already-open RE folder window onto the Moonlight screen.")
+        _manual_step(2, "Start the game manually from that folder.")
         input("[re-stack] Press Enter after you have launched the game...")
-        print("[re-stack] I will now wait for the RE game process to start, then monitor for exit.")
+        _manual_note("Waiting for the RE game process to start, then monitoring for exit.")
 
         while True:
             now = time.time()
