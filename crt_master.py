@@ -150,6 +150,38 @@ def restore_resident_evil_stack() -> None:
     input("\nPress Enter to return to menu...")
 
 
+def tools_menu() -> None:
+    while True:
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print("========================================")
+        print("              TOOLS MENU")
+        print("========================================")
+        print(" 1. Restore Default Settings")
+        print(" 2. Recover Resident Evil Stack")
+        print(" 3. Restore Display & Audio")
+        print(" 4. Back")
+        print("========================================")
+        try:
+            choice = input("\nSelect an option (1-4): ").strip()
+            if choice == '1':
+                ok, msg, restored = restore_defaults_from_backup()
+                print(msg)
+                if restored:
+                    print("\nRestored files:")
+                    for item in restored:
+                        print(f" - {item}")
+                input("\nPress Enter to return to Tools menu...")
+            elif choice == '2':
+                restore_resident_evil_stack()
+            elif choice == '3':
+                restore_display_state()
+            elif choice == '4':
+                return
+        except KeyboardInterrupt:
+            print("\nInterrupted. Returning to main menu...")
+            return
+
+
 def main():
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -161,14 +193,12 @@ def main():
         print(" 3. [GAMING] Launch LaunchBox (Session)")
         print(" 4. [CINEMA] Launch Plex")
         print(" 5. [GAMING] Launch Resident Evil (Manual Mode)")
-        print(" 6. [TOOLS]  Restore Default Settings")
-        print(" 7. [TOOLS]  Recover Resident Evil Stack")
-        print(" 8. [TOOLS]  Restore Display & Audio")
-        print(" 9. [EXIT]   Close Menu")
+        print(" 6. [TOOLS]  Open Tools Menu")
+        print(" 7. [EXIT]   Close Menu")
         print("========================================")
 
         try:
-            choice = input("\nSelect an option (1-9): ")
+            choice = input("\nSelect an option (1-7): ")
             if choice == '1':
                 run_retroarch_mode()
             elif choice == '2':
@@ -204,18 +234,8 @@ def main():
             elif choice == '5':
                 run_resident_evil_stack_manual()
             elif choice == '6':
-                ok, msg, restored = restore_defaults_from_backup()
-                print(msg)
-                if restored:
-                    print("\nRestored files:")
-                    for item in restored:
-                        print(f" - {item}")
-                input("\nPress Enter to return to menu...")
+                tools_menu()
             elif choice == '7':
-                restore_resident_evil_stack()
-            elif choice == '8':
-                restore_display_state()
-            elif choice == '9':
                 break
         except KeyboardInterrupt:
             print("\nInterrupted. Returning to menu...")
