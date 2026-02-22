@@ -104,7 +104,7 @@ def run_plex_mode() -> None:
         force_restore_plex()
 
 
-def run_resident_evil_stack() -> None:
+def run_resident_evil_stack_manual() -> None:
     if not os.path.exists(RE_STACK_LAUNCHER):
         print(f"Resident Evil stack launcher not found: {RE_STACK_LAUNCHER}")
         input("Press Enter to return to menu...")
@@ -122,10 +122,7 @@ def run_resident_evil_stack() -> None:
         input("Press Enter to return to menu...")
         return
 
-    debug = input("Enable debug logs? (y/N): ").strip().lower() == "y"
-    cmd = [sys.executable, RE_STACK_LAUNCHER, "start", "--game", game]
-    if debug:
-        cmd.append("--debug")
+    cmd = [sys.executable, RE_STACK_LAUNCHER, "manual", "--game", game]
 
     try:
         subprocess.run(cmd)
@@ -163,7 +160,7 @@ def main():
         print(" 2. [GAMING] Launch LaunchBox CRT Watcher")
         print(" 3. [GAMING] Launch LaunchBox (Session)")
         print(" 4. [CINEMA] Launch Plex")
-        print(" 5. [GAMING] Launch Resident Evil Stack")
+        print(" 5. [GAMING] Launch Resident Evil (Manual Mode)")
         print(" 6. [TOOLS]  Restore Default Settings")
         print(" 7. [TOOLS]  Recover Resident Evil Stack")
         print(" 8. [TOOLS]  Restore Display & Audio")
@@ -205,7 +202,7 @@ def main():
             elif choice == '4':
                 run_plex_mode()
             elif choice == '5':
-                run_resident_evil_stack()
+                run_resident_evil_stack_manual()
             elif choice == '6':
                 ok, msg, restored = restore_defaults_from_backup()
                 print(msg)

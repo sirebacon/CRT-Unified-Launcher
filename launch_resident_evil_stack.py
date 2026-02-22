@@ -16,12 +16,13 @@ from datetime import datetime
 from typing import List, Optional
 
 from default_restore import restore_defaults_from_backup
-from session.audio import audio_tool_status
+from session.audio import audio_tool_status, set_default_audio_best_effort
 from session.display_api import (
     current_primary_device_name,
     current_primary_display,
     enumerate_attached_displays,
     find_display_by_token,
+    get_crt_display_rect,
     get_display_mode,
     set_display_refresh_best_effort,
     set_primary_display_verified,
@@ -31,6 +32,7 @@ from session.moonlight import (
     is_gameplay_window_visible,
     is_moonlight_fullscreen,
     move_moonlight_to_crt,
+    move_moonlight_to_internal,
 )
 from session.moonlight_adjuster import adjust_moonlight, capture_moonlight_pos
 from session.re_config import (
@@ -57,6 +59,7 @@ from session.re_config import (
 from session.re_game import find_wrapper_pids, is_re_game_running
 from session.re_state import apply_re_mode_system_state, apply_restore_system_state
 from session.vdd import plug_vdd_and_wait
+from session.window_utils import find_window, get_rect, move_window
 
 try:
     import psutil
@@ -83,6 +86,17 @@ def parse_args() -> argparse.Namespace:
         choices=sorted(GAME_PROFILES.keys()),
         required=True,
         help="Which game profile to use (for gameplay window detection).",
+    )
+
+    p_manual = sub.add_parser(
+        "manual",
+        help="Guided manual RE mode (you control display settings/primary).",
+    )
+    p_manual.add_argument(
+        "--game",
+        choices=sorted(GAME_PROFILES.keys()),
+        required=True,
+        help="Which game profile to use (for process monitoring/log labeling).",
     )
 
     sub.add_parser("restore", help="Stop enforcement and restore display/audio defaults.")
@@ -160,6 +174,208 @@ def _ensure_required_displays() -> bool:
         return False
 
     return True
+
+
+def _attached_display_count() -> int:
+    return len(enumerate_attached_displays())
+
+
+def _open_windows_display_settings() -> None:
+    try:
+        if os.name == "nt" and hasattr(os, "startfile"):
+            os.startfile("ms-settings:display")  # type: ignore[attr-defined]
+            print("[re-stack] Opened Windows Display Settings (ms-settings:display).")
+            return
+    except Exception as e:
+        print(f"[re-stack] Could not open Display Settings via startfile: {e}")
+
+    for cmd in (
+        ["explorer.exe", "ms-settings:display"],
+        ["cmd", "/c", "start", "", "ms-settings:display"],
+    ):
+        try:
+            subprocess.Popen(cmd)
+            print("[re-stack] Opened Windows Display Settings (ms-settings:display).")
+            return
+        except Exception:
+            continue
+    print("[re-stack] Could not open Windows Display Settings automatically.")
+
+
+def _open_re_game_folder(profile_path: str) -> None:
+    """Open the selected RE game folder in Windows Explorer for manual launch."""
+    try:
+        with open(profile_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        target_dir = str(data.get("dir") or "").strip()
+        target_exe = str(data.get("path") or "").strip()
+        if target_dir and os.path.isdir(target_dir):
+            print(f"[re-stack] Opening RE game folder: {target_dir}")
+            try:
+                if os.name == "nt" and hasattr(os, "startfile"):
+                    os.startfile(target_dir)  # type: ignore[attr-defined]
+                    print(f"[re-stack] Opened RE game folder: {target_dir}")
+                    return
+            except Exception as e:
+                print(f"[re-stack] os.startfile failed for RE folder: {e}")
+            for cmd in (
+                ["explorer.exe", target_dir],
+                ["cmd", "/c", "start", "", target_dir],
+            ):
+                try:
+                    subprocess.Popen(cmd)
+                    print(f"[re-stack] Opened RE game folder: {target_dir}")
+                    return
+                except Exception:
+                    continue
+        if target_exe:
+            exe_dir = os.path.dirname(target_exe)
+            if exe_dir and os.path.isdir(exe_dir):
+                print(f"[re-stack] Opening RE game folder: {exe_dir}")
+                try:
+                    if os.name == "nt" and hasattr(os, "startfile"):
+                        os.startfile(exe_dir)  # type: ignore[attr-defined]
+                        print(f"[re-stack] Opened RE game folder: {exe_dir}")
+                        return
+                except Exception as e:
+                    print(f"[re-stack] os.startfile failed for RE folder: {e}")
+                for cmd in (
+                    ["explorer.exe", exe_dir],
+                    ["cmd", "/c", "start", "", exe_dir],
+                ):
+                    try:
+                        subprocess.Popen(cmd)
+                        print(f"[re-stack] Opened RE game folder: {exe_dir}")
+                        return
+                    except Exception:
+                        continue
+        print("[re-stack] Could not open RE game folder (directory not found in profile).")
+    except Exception as e:
+        print(f"[re-stack] Could not open RE game folder from profile '{profile_path}': {e}")
+
+
+def _folder_window_title_hint_from_profile(profile_path: str) -> str:
+    try:
+        with open(profile_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        target_dir = str(data.get("dir") or "").strip()
+        if target_dir:
+            return os.path.basename(os.path.normpath(target_dir)).lower()
+        target_exe = str(data.get("path") or "").strip()
+        if target_exe:
+            return os.path.basename(os.path.dirname(target_exe)).lower()
+    except Exception:
+        pass
+    return "resident evil"
+
+
+def _move_re_folder_window_to_internal(profile_path: str) -> bool:
+    """Best-effort: move the opened RE Explorer folder window onto the internal display."""
+    rect = get_crt_display_rect(REQUIRED_DISPLAY_GROUPS["internal_display"])
+    if rect is None:
+        if MOONLIGHT_IDLE_RECT is not None:
+            ix, iy, iw, ih = MOONLIGHT_IDLE_RECT
+        else:
+            print("[re-stack] Could not detect internal display for RE folder placement.")
+            return False
+    else:
+        ix, iy, iw, ih = rect
+
+    # Keep a margin so the Explorer frame stays fully visible.
+    margin_x = 60
+    margin_y = 60
+    x = ix + margin_x
+    y = iy + margin_y
+    w = max(700, min(1400, iw - (margin_x * 2)))
+    h = max(500, min(900, ih - (margin_y * 2)))
+
+    title_hint = _folder_window_title_hint_from_profile(profile_path)
+    for _ in range(24):
+        hwnd = find_window(None, ["cabinetwclass"], [title_hint], match_any_pid=True)
+        if hwnd is None:
+            # Fallback: any visible Explorer window if exact title is not available yet.
+            hwnd = find_window(None, ["cabinetwclass"], [], match_any_pid=True)
+        if hwnd:
+            try:
+                move_window(hwnd, x, y, w, h, strip_caption=False)
+                print(
+                    "[re-stack] RE folder window moved to Internal Display: "
+                    f"x={x}, y={y}, w={w}, h={h}"
+                )
+                return True
+            except Exception as e:
+                print(f"[re-stack] Failed moving RE folder window to Internal Display: {e}")
+                return False
+        time.sleep(0.25)
+
+    print("[re-stack] Could not find RE folder Explorer window to move to Internal Display.")
+    return False
+
+
+def _find_re_folder_window(profile_path: str) -> Optional[int]:
+    title_hint = _folder_window_title_hint_from_profile(profile_path)
+    hwnd = find_window(None, ["cabinetwclass"], [title_hint], match_any_pid=True)
+    if hwnd is None:
+        hwnd = find_window(None, ["cabinetwclass"], [], match_any_pid=True)
+    return hwnd
+
+
+def _rect_overlap_ratio(a: tuple, b: tuple) -> float:
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    ax2, ay2 = ax + aw, ay + ah
+    bx2, by2 = bx + bw, by + bh
+    ix = max(0, min(ax2, bx2) - max(ax, bx))
+    iy = max(0, min(ay2, by2) - max(ay, by))
+    area = aw * ah
+    return ((ix * iy) / area) if area > 0 else 0.0
+
+
+def _is_re_folder_on_moonlight_display(profile_path: str) -> Optional[bool]:
+    moon_rect = get_crt_display_rect(REQUIRED_DISPLAY_GROUPS["moonlight_display"])
+    if moon_rect is None:
+        return None
+    hwnd = _find_re_folder_window(profile_path)
+    if hwnd is None:
+        return None
+    try:
+        win_rect = get_rect(hwnd)
+    except Exception:
+        return None
+    return _rect_overlap_ratio(win_rect, moon_rect) >= 0.5
+
+
+def _move_moonlight_back_to_internal_manual() -> bool:
+    """Manual mode return path: prefer current internal display bounds over saved idle rect."""
+    print("[re-stack] Returning Moonlight to Internal Display using current display layout...")
+    # In manual mode the user may have changed topology/positions, so the saved
+    # idle rect can be stale. Prefer live internal display bounds first.
+    if move_moonlight_to_internal(
+        REQUIRED_DISPLAY_GROUPS["internal_display"],
+        MOONLIGHT_DIR,
+        idle_rect=None,
+    ):
+        return True
+    print("[re-stack] Live internal display move failed; trying configured idle rect fallback...")
+    return move_moonlight_to_internal(
+        REQUIRED_DISPLAY_GROUPS["internal_display"],
+        MOONLIGHT_DIR,
+        idle_rect=MOONLIGHT_IDLE_RECT,
+    )
+
+
+def _print_manual_mode_checklist(game: str) -> None:
+    print(f"[re-stack] Manual RE mode ready for {game}.")
+    print("[re-stack] Follow these steps before continuing:")
+    print(" 1. The RE game folder should already be open in Explorer.")
+    print(" 2. In Windows Display Settings, confirm all 3 displays are attached.")
+    print(" 3. Set/verify resolutions for Internal, CRT, and SudoMaker displays.")
+    print(" 4. Set the PRIMARY display manually (you will handle this).")
+    print(" 5. Return here and press Enter so I can verify monitor presence.")
+    print(" 6. I will move Moonlight to the CRT screen for you.")
+    print(" 7. Move the RE folder window onto the Moonlight screen and launch the game manually.")
+    print(" 8. When the game exits, I will move Moonlight back to the Internal Display.")
+    print("    (You will change primary display back manually.)")
 
 
 # ---------------------------------------------------------------------------
@@ -368,6 +584,125 @@ def start_stack(game: str) -> int:
     return 0
 
 
+def manual_stack(game: str) -> int:
+    """Guided manual RE mode.
+
+    This mode launches Moonlight and opens Windows Display Settings, but leaves
+    display mode changes and primary switching to the user. It verifies that the
+    required displays are present, then waits for the RE game process to start
+    and later exit. On exit, Moonlight is moved back to the internal display.
+    """
+    profile = GAME_PROFILES[game]
+    if not os.path.exists(profile):
+        print(f"[re-stack] Profile not found: {profile}")
+        return 1
+
+    try:
+        if os.path.exists(STOP_FLAG):
+            os.remove(STOP_FLAG)
+    except Exception:
+        pass
+
+    interrupted = False
+    game_was_running = False
+    last_wait_log = 0.0
+
+    try:
+        if is_re_game_running():
+            print("[re-stack] RE game is already running; aborting manual mode.")
+            return 1
+
+        if not ensure_moonlight_running(MOONLIGHT_EXE, MOONLIGHT_DIR):
+            print("[re-stack] Moonlight requirement failed; aborting.")
+            return 1
+
+        _open_re_game_folder(profile)
+        _move_re_folder_window_to_internal(profile)
+
+        if not plug_vdd_and_wait(
+            REQUIRED_DISPLAY_GROUPS["moonlight_display"][0],
+            timeout_seconds=VDD_ATTACH_TIMEOUT_SECONDS,
+        ):
+            print("[re-stack] VDD plug in failed; aborting.")
+            return 1
+
+        _open_windows_display_settings()
+        # Re-assert folder placement after topology changes / settings window opens.
+        _move_re_folder_window_to_internal(profile)
+        print()
+        _print_manual_mode_checklist(game)
+        print()
+        input("[re-stack] Press Enter after you have finished the manual display setup steps...")
+
+        count = _attached_display_count()
+        print(f"[re-stack] Attached display count after manual setup: {count}")
+        if count != 3:
+            print("[re-stack] Expected 3 attached displays. Please fix display setup and try again.")
+            return 1
+        if not _ensure_required_displays():
+            print("[re-stack] Required display set not found after manual setup.")
+            return 1
+
+        print("[re-stack] Verified 3 displays and required display matches.")
+        print("[re-stack] Moving Moonlight to CRT display...")
+        moved = move_moonlight_to_crt(
+            REQUIRED_DISPLAY_GROUPS["crt_display"],
+            MOONLIGHT_DIR,
+            crt_config_path=CRT_CONFIG_PATH,
+            crt_rect=MOONLIGHT_CRT_RECT,
+        )
+        if not moved:
+            print("[re-stack] Could not move Moonlight to CRT. Fix placement manually and retry.")
+            return 1
+
+        print("[re-stack] Moonlight moved to CRT.")
+        set_default_audio_best_effort(RE_AUDIO_DEVICE_TOKEN)
+        folder_on_moonlight = _is_re_folder_on_moonlight_display(profile)
+        if folder_on_moonlight is True:
+            print("[re-stack] RE folder window appears to already be on the Moonlight display.")
+        elif folder_on_moonlight is False:
+            print("[re-stack] RE folder window does not appear to be on the Moonlight display yet.")
+        else:
+            print("[re-stack] Could not verify RE folder window placement on Moonlight display.")
+        print("[re-stack] Move the already-open RE folder window to the Moonlight screen.")
+        print("[re-stack] Start the game manually from that folder when ready.")
+        input("[re-stack] Press Enter after you have launched the game...")
+        print("[re-stack] I will now wait for the RE game process to start, then monitor for exit.")
+
+        while True:
+            now = time.time()
+            running = is_re_game_running()
+            if running:
+                if not game_was_running:
+                    game_was_running = True
+                    print("[re-stack] RE game process detected. Monitoring for exit...")
+            elif game_was_running:
+                print("[re-stack] RE game has exited. Moving Moonlight back to Internal Display...")
+                _move_moonlight_back_to_internal_manual()
+                set_default_audio_best_effort(RESTORE_AUDIO_DEVICE_TOKEN)
+                print("[re-stack] Moonlight move-to-internal requested.")
+                print("[re-stack] Reminder: set your primary display back manually.")
+                break
+            elif now - last_wait_log >= 10.0:
+                print("[re-stack] Waiting for RE game process to start...")
+                last_wait_log = now
+
+            time.sleep(1.0)
+
+    except KeyboardInterrupt:
+        interrupted = True
+        print("[re-stack] Ctrl+C detected.")
+        print("[re-stack] Attempting to move Moonlight back to Internal Display...")
+        try:
+            _move_moonlight_back_to_internal_manual()
+            set_default_audio_best_effort(RESTORE_AUDIO_DEVICE_TOKEN)
+        except Exception:
+            pass
+        print("[re-stack] Reminder: set your primary display manually as needed.")
+
+    return 130 if interrupted else 0
+
+
 def restore_stack() -> int:
     try:
         with open(STOP_FLAG, "w", encoding="utf-8") as f:
@@ -457,6 +792,8 @@ def main() -> int:
     _enable_persistent_logging()
     if args.command == "start":
         return start_stack(args.game)
+    if args.command == "manual":
+        return manual_stack(args.game)
     if args.command == "restore":
         return restore_stack()
     if args.command == "set-idle-pos":
