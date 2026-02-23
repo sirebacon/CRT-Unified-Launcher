@@ -17,8 +17,8 @@ Script:
 
 Menu integration:
 
-- `crt_master.py` option `5` -> Resident Evil (Manual Mode)
-- `crt_master.py` option `6` -> Tools submenu (includes RE recovery restore)
+- `crt_station.py` option `5` -> Resident Evil (Manual Mode)
+- `crt_station.py` option `6` -> Tools submenu (includes RE recovery restore)
 
 ## Code Organization
 
@@ -242,3 +242,4 @@ If neither is available:
    - Confirm the profile has a `gameplay_title` field.
    - The title must be a substring of the actual gameplay window title and must NOT appear in the config/launcher screen titles.
    - Fallback (no `gameplay_title`): WS_CAPTION absence check — less reliable for Moonlight.
+

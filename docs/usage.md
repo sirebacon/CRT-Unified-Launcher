@@ -1,9 +1,9 @@
-﻿# Usage
+# Usage
 
 ## Starting the Launcher
 
 ```powershell
-python crt_master.py
+python crt_station.py
 ```
 
 Menu options:
@@ -139,3 +139,4 @@ Plex live calibration:
 ```powershell
 python tools\plex_callibrate.py
 ```
+

@@ -92,6 +92,149 @@ def current_primary_device_name() -> str:
     return str(d.get("device_name", "")).strip()
 
 
+def get_rational_refresh_map() -> dict:
+    """Return {gdi_device_name.lower(): (numerator, denominator)} for all active display paths.
+
+    Uses QueryDisplayConfig to get the exact rational refresh rate reported by the driver.
+    This is more precise than EnumDisplaySettings.DisplayFrequency (which is an integer).
+    For example, 60.000 Hz appears as (60, 1) and 59.94 Hz appears as (60000, 1001).
+    Returns an empty dict on any failure.
+    """
+    try:
+        user32 = ctypes.windll.user32
+    except Exception:
+        return {}
+
+    QDC_ONLY_ACTIVE_PATHS = 0x00000002
+    DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME = 1
+    ERROR_SUCCESS = 0
+
+    class _LUID(ctypes.Structure):
+        _fields_ = [("LowPart", ctypes.c_ulong), ("HighPart", ctypes.c_long)]
+
+    class _Rational(ctypes.Structure):
+        _fields_ = [("Numerator", ctypes.c_uint32), ("Denominator", ctypes.c_uint32)]
+
+    class _2DRegion(ctypes.Structure):
+        _fields_ = [("cx", ctypes.c_uint32), ("cy", ctypes.c_uint32)]
+
+    class _VideoSignalInfo(ctypes.Structure):
+        _fields_ = [
+            ("pixelRate", ctypes.c_uint64),
+            ("hSyncFreq", _Rational),
+            ("vSyncFreq", _Rational),
+            ("activeSize", _2DRegion),
+            ("totalSize", _2DRegion),
+            ("videoStandard", ctypes.c_uint32),
+            ("scanLineOrdering", ctypes.c_int),
+        ]
+
+    class _TargetMode(ctypes.Structure):
+        _fields_ = [("targetVideoSignalInfo", _VideoSignalInfo)]
+
+    class _POINTL(ctypes.Structure):
+        _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+    class _SourceMode(ctypes.Structure):
+        _fields_ = [
+            ("width", ctypes.c_uint32),
+            ("height", ctypes.c_uint32),
+            ("pixelFormat", ctypes.c_int),
+            ("position", _POINTL),
+        ]
+
+    class _ModeInfoUnion(ctypes.Union):
+        _fields_ = [("targetMode", _TargetMode), ("sourceMode", _SourceMode)]
+
+    class _ModeInfo(ctypes.Structure):
+        _fields_ = [
+            ("infoType", ctypes.c_int),
+            ("id", ctypes.c_uint32),
+            ("adapterId", _LUID),
+            ("info", _ModeInfoUnion),
+        ]
+
+    class _PathSourceInfo(ctypes.Structure):
+        _fields_ = [
+            ("adapterId", _LUID),
+            ("id", ctypes.c_uint32),
+            ("modeInfoIdx", ctypes.c_uint32),
+            ("statusFlags", ctypes.c_uint32),
+        ]
+
+    class _PathTargetInfo(ctypes.Structure):
+        _fields_ = [
+            ("adapterId", _LUID),
+            ("id", ctypes.c_uint32),
+            ("modeInfoIdx", ctypes.c_uint32),
+            ("outputTechnology", ctypes.c_int),
+            ("rotation", ctypes.c_int),
+            ("scaling", ctypes.c_int),
+            ("refreshRate", _Rational),
+            ("scanLineOrdering", ctypes.c_int),
+            ("targetAvailable", ctypes.c_int),
+            ("statusFlags", ctypes.c_uint32),
+        ]
+
+    class _PathInfo(ctypes.Structure):
+        _fields_ = [
+            ("sourceInfo", _PathSourceInfo),
+            ("targetInfo", _PathTargetInfo),
+            ("flags", ctypes.c_uint32),
+        ]
+
+    class _DeviceInfoHeader(ctypes.Structure):
+        _fields_ = [
+            ("type", ctypes.c_int),
+            ("size", ctypes.c_uint32),
+            ("adapterId", _LUID),
+            ("id", ctypes.c_uint32),
+        ]
+
+    class _SourceDeviceName(ctypes.Structure):
+        _fields_ = [
+            ("header", _DeviceInfoHeader),
+            ("viewGdiDeviceName", ctypes.c_wchar * 32),
+        ]
+
+    try:
+        num_paths = ctypes.c_uint32()
+        num_modes = ctypes.c_uint32()
+        ret = user32.GetDisplayConfigBufferSizes(
+            QDC_ONLY_ACTIVE_PATHS, ctypes.byref(num_paths), ctypes.byref(num_modes)
+        )
+        if ret != ERROR_SUCCESS:
+            return {}
+
+        paths = (_PathInfo * num_paths.value)()
+        modes = (_ModeInfo * num_modes.value)()
+        ret = user32.QueryDisplayConfig(
+            QDC_ONLY_ACTIVE_PATHS,
+            ctypes.byref(num_paths), paths,
+            ctypes.byref(num_modes), modes,
+            None,
+        )
+        if ret != ERROR_SUCCESS:
+            return {}
+
+        result = {}
+        for i in range(num_paths.value):
+            info = _SourceDeviceName()
+            info.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME
+            info.header.size = ctypes.sizeof(_SourceDeviceName)
+            info.header.adapterId = paths[i].sourceInfo.adapterId
+            info.header.id = paths[i].sourceInfo.id
+            if user32.DisplayConfigGetDeviceInfo(ctypes.byref(info)) == ERROR_SUCCESS:
+                gdi = info.viewGdiDeviceName.lower().rstrip("\x00")
+                n = paths[i].targetInfo.refreshRate.Numerator
+                d = paths[i].targetInfo.refreshRate.Denominator
+                if gdi and d > 0:
+                    result[gdi] = (n, d)
+        return result
+    except Exception:
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # CRT display rect
 # ---------------------------------------------------------------------------

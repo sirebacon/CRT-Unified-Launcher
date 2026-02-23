@@ -56,7 +56,7 @@ This validates manifest/profile/patch paths and performs backup -> patch -> rest
 ## 4. Start the Launcher
 
 ```powershell
-python crt_master.py
+python crt_station.py
 ```
 
 Recommended path:
@@ -144,7 +144,7 @@ Audio switching note:
 - Automatic audio switching uses `AudioDeviceCmdlets` (preferred) or `nircmd.exe` if available.
 - If neither is installed, the script logs a warning and continues.
 
-You can also run these via `python crt_master.py`:
+You can also run these via `python crt_station.py`:
 - Option `5` launches Resident Evil (Manual Mode)
 - Option `6` opens the Tools submenu (includes RE recovery restore)
 
@@ -156,3 +156,4 @@ You can also run these via `python crt_master.py`:
 - `docs/usage.md` - menu options and workflow
 - `docs/architecture.md` - session lifecycle and components
 - `docs/TODO.md` - active prioritized work list
+

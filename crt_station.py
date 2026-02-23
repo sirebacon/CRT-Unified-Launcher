@@ -13,6 +13,7 @@ SESSION_LAUNCHER = "launch_session.py"
 RETROARCH_SESSION_PROFILE = os.path.join("profiles", "retroarch-session.json")
 GAMING_MANIFEST = os.path.join("profiles", "gaming-manifest.json")
 RE_STACK_LAUNCHER = "launch_resident_evil_stack.py"
+CRT_TOOLS_LAUNCHER = "crt_tools.py"
 
 
 def stop_plex_lockers() -> None:
@@ -27,6 +28,14 @@ def stop_plex_lockers() -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+
+
+def _is_quit(choice: str) -> bool:
+    return choice.strip().lower() in {"q", "quit", "x", "exit"}
+
+
+def _is_back(choice: str) -> bool:
+    return choice.strip().lower() in {"b", "back"}
 
 
 def force_restore_plex() -> None:
@@ -131,12 +140,19 @@ def run_resident_evil_stack_manual() -> None:
 
 
 def restore_display_state() -> None:
-    print("\nRestoring primary display to Intel UHD and CRT refresh to 60 Hz...")
-    ok = apply_restore_system_state()
-    if ok:
-        print("Display and audio restored.")
+    if os.path.exists(CRT_TOOLS_LAUNCHER):
+        print("\nRestoring display state using crt_tools...")
+        subprocess.run([sys.executable, CRT_TOOLS_LAUNCHER, "display", "restore", "--force"])
+        print("\nRestoring audio output using crt_tools...")
+        subprocess.run([sys.executable, CRT_TOOLS_LAUNCHER, "audio", "restore", "--force"])
+        print("\nDisplay/audio restore commands completed. Verify Windows display settings if needed.")
     else:
-        print("WARNING: Primary display restore may not have completed; check display settings.")
+        print("\nRestoring primary display to Intel UHD and CRT refresh to 60 Hz...")
+        ok = apply_restore_system_state()
+        if ok:
+            print("Display and audio restored.")
+        else:
+            print("WARNING: Primary display restore may not have completed; check display settings.")
     input("\nPress Enter to return to menu...")
 
 
@@ -150,33 +166,64 @@ def restore_resident_evil_stack() -> None:
     input("\nPress Enter to return to menu...")
 
 
-def tools_menu() -> None:
+def _run_crt_tools(*tool_args: str, pause: bool = True) -> None:
+    if not os.path.exists(CRT_TOOLS_LAUNCHER):
+        print(f"CRT tools launcher not found: {CRT_TOOLS_LAUNCHER}")
+        if pause:
+            input("\nPress Enter to return...")
+        return
+
+    cmd = [sys.executable, CRT_TOOLS_LAUNCHER, *tool_args]
+    try:
+        subprocess.run(cmd)
+    except KeyboardInterrupt:
+        print("\nInterrupted.")
+    if pause:
+        input("\nPress Enter to return...")
+
+
+def crt_tools_menu() -> None:
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         print("========================================")
-        print("              TOOLS MENU")
+        print("              CRT TOOLS")
         print("========================================")
-        print(" 1. Restore Default Settings")
-        print(" 2. Recover Resident Evil Stack")
-        print(" 3. Restore Display & Audio")
-        print(" 4. Back")
+        print(" 1. Display Dump")
+        print(" 2. Config Dump")
+        print(" 3. Config Check")
+        print(" 4. Prereqs Check")
+        print(" 5. Window List (Moonlight)")
+        print(" 6. Audio Status")
+        print(" 7. Session Log (last 40 lines)")
+        print(" 8. Session Processes")
+        print(" 9. Restore Display & Audio")
+        print("10. Back")
+        print("    Quick keys: [b] Back, [q] Quit")
         print("========================================")
         try:
-            choice = input("\nSelect an option (1-4): ").strip()
-            if choice == '1':
-                ok, msg, restored = restore_defaults_from_backup()
-                print(msg)
-                if restored:
-                    print("\nRestored files:")
-                    for item in restored:
-                        print(f" - {item}")
-                input("\nPress Enter to return to Tools menu...")
-            elif choice == '2':
-                restore_resident_evil_stack()
-            elif choice == '3':
-                restore_display_state()
-            elif choice == '4':
+            choice = input("\nSelect an option (1-10): ").strip()
+            if _is_quit(choice):
+                raise SystemExit(0)
+            if _is_back(choice) or choice == '10':
                 return
+            if choice == '1':
+                _run_crt_tools("display", "dump")
+            elif choice == '2':
+                _run_crt_tools("config", "dump")
+            elif choice == '3':
+                _run_crt_tools("config", "check")
+            elif choice == '4':
+                _run_crt_tools("prereqs")
+            elif choice == '5':
+                _run_crt_tools("window", "list", "--filter", "moonlight")
+            elif choice == '6':
+                _run_crt_tools("audio", "status")
+            elif choice == '7':
+                _run_crt_tools("session", "log", "--lines", "40")
+            elif choice == '8':
+                _run_crt_tools("session", "processes")
+            elif choice == '9':
+                restore_display_state()
         except KeyboardInterrupt:
             print("\nInterrupted. Returning to main menu...")
             return
@@ -186,57 +233,44 @@ def main():
     while True:
         os.system('cls' if os.name == 'nt' else 'clear')
         print("========================================")
-        print("        CRT WORKSTATION MANAGER")
+        print("           CRT STATION")
         print("========================================")
         print(" 1. [GAMING] Launch RetroArch")
-        print(" 2. [GAMING] Launch LaunchBox CRT Watcher")
-        print(" 3. [GAMING] Launch LaunchBox (Session)")
-        print(" 4. [CINEMA] Launch Plex")
-        print(" 5. [GAMING] Launch Resident Evil (Manual Mode)")
-        print(" 6. [TOOLS]  Open Tools Menu")
-        print(" 7. [EXIT]   Close Menu")
+        print(" 2. [GAMING] Launch LaunchBox (Session)")
+        print(" 3. [CINEMA] Launch Plex")
+        print(" 4. [GAMING] Launch Resident Evil (Manual Mode)")
+        print(" 5. [TOOLS]  CRT Tools")
+        print(" 6. [TOOLS]  Restore Default Settings")
+        print(" 7. [TOOLS]  Recover Resident Evil Stack")
+        print(" 8. [EXIT]   Close Menu")
+        print("    Quick keys: [q] Quit")
         print("========================================")
 
         try:
-            choice = input("\nSelect an option (1-7): ")
+            choice = input("\nSelect an option (1-8): ").strip()
+            if _is_quit(choice) or choice == '8':
+                break
             if choice == '1':
                 run_retroarch_mode()
             elif choice == '2':
-                ok, msg, backup_dir = apply_crt_session_mode()
-                if not ok:
-                    print(msg)
-                    input("Press Enter to return to menu...")
-                    continue
-
-                if os.path.exists(LAUNCHBOX_EXE):
-                    subprocess.Popen([LAUNCHBOX_EXE], cwd=LAUNCHBOX_DIR)
-                else:
-                    print(f"LaunchBox not found at: {LAUNCHBOX_EXE}")
-                    if backup_dir:
-                        restore_session_mode(backup_dir)
-                    input("Press Enter to return to menu...")
-                    continue
-                try:
-                    result = subprocess.run([sys.executable, "launchbox_crt_watcher.py"])
-                    if result.returncode != 0:
-                        print(f"LaunchBox watcher exited with code {result.returncode}.")
-                        input("Press Enter to return to menu...")
-                finally:
-                    ok_restore, restore_msg = restore_session_mode(backup_dir)
-                    if not ok_restore:
-                        print(restore_msg)
-                        input("Press Enter to continue...")
-            elif choice == '3':
                 run_gaming_session()
                 input("\nPress Enter to return to menu...")
-            elif choice == '4':
+            elif choice == '3':
                 run_plex_mode()
-            elif choice == '5':
+            elif choice == '4':
                 run_resident_evil_stack_manual()
+            elif choice == '5':
+                crt_tools_menu()
             elif choice == '6':
-                tools_menu()
+                ok, msg, restored = restore_defaults_from_backup()
+                print(msg)
+                if restored:
+                    print("\nRestored files:")
+                    for item in restored:
+                        print(f" - {item}")
+                input("\nPress Enter to return to menu...")
             elif choice == '7':
-                break
+                restore_resident_evil_stack()
         except KeyboardInterrupt:
             print("\nInterrupted. Returning to menu...")
             stop_plex_lockers()

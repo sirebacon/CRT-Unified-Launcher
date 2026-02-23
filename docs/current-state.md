@@ -16,7 +16,7 @@ Core objective: keep emulator windows on calibrated CRT coordinates and restore 
 
 ### Unified Launcher
 
-- `crt_master.py` — interactive menu with 6 options:
+- `crt_station.py` — interactive menu with 6 options:
   1. RetroArch standalone launch and window lock
   2. LaunchBox CRT Watcher (legacy mode, still functional)
   3. LaunchBox Gaming Session (current recommended mode)
@@ -55,7 +55,7 @@ Core objective: keep emulator windows on calibrated CRT coordinates and restore 
 
 ## Recommended Workflow
 
-1. Run `python crt_master.py`.
+1. Run `python crt_station.py`.
 2. Choose **option 3** to start a gaming session:
    - LaunchBox/BigBox opens on the main screen.
    - Emulator configs are patched automatically.
@@ -69,4 +69,5 @@ Core objective: keep emulator windows on calibrated CRT coordinates and restore 
 - Steam/GOG games that run under a different process name than what is in their watch profile are not tracked. This is an accepted limitation for v1.
 - Two instances of the same emulator: only the first (by PID order) is tracked. The second floats uncontrolled.
 - `launchbox_settings` patches (BigBoxSettings.xml, Settings.xml) have no effect in reattach mode since LaunchBox already loaded them at startup.
+
 

@@ -16,7 +16,7 @@ When restore fails, the session tool should:
 - copy backup file to original target path
 - verify file contents match expected defaults
 3. Remove session lockfile if no session process is running:
-- expected path: `.session.lock` (project root, next to `crt_master.py`)
+- expected path: `.session.lock` (project root, next to `crt_station.py`)
 4. Remove stale stop flag if present:
 - `wrapper_stop_enforce.flag`
 
@@ -31,3 +31,4 @@ Copy-Item "C:\path\to\backup\Emulators.xml" "D:\Emulators\LaunchBox\Data\Emulato
 1. Launch LaunchBox and verify emulator paths/settings are normal.
 2. Run session dry-run validation before next live session.
 3. If restore repeatedly fails on same file, check file locks and permissions.
+

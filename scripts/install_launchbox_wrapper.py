@@ -1,4 +1,4 @@
-﻿import datetime as dt
+import datetime as dt
 import argparse
 import os
 import shutil
@@ -164,7 +164,7 @@ def main() -> int:
         print(f" - {WRAPPER_PPSSPP}")
         print(f" - {WRAPPER_DOLPHIN}")
         print(f" - {WRAPPER_PCSX2}")
-        print("Use crt_master.py option 2 for temporary session patching.")
+        print("Use crt_station.py option 2 for temporary session patching.")
         print("Use --global only if you want always-on wrapper patching.")
         return 0
 
@@ -185,6 +185,7 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 
 
 
