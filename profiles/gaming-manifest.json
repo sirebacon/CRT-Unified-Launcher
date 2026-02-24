@@ -15,6 +15,15 @@
   "patches": [
     {
       "type": "retroarch_cfg",
+      "path": "D:\\Emulators\\RetroArch-Win64\\retroarch_crt.cfg",
+      "set_values": {
+        "video_fullscreen": "false",
+        "video_windowed_fullscreen": "false"
+      }
+    },
+
+    {
+      "type": "retroarch_cfg",
       "path": "D:\\Emulators\\RetroArch-Win64\\retroarch.cfg",
       "set_values": {
         "video_fullscreen": "false",

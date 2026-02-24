@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
 from default_restore import restore_defaults_from_backup
 from launchbox_session_mode import apply_crt_session_mode, restore_session_mode
@@ -14,6 +15,7 @@ RETROARCH_SESSION_PROFILE = os.path.join("profiles", "retroarch-session.json")
 GAMING_MANIFEST = os.path.join("profiles", "gaming-manifest.json")
 RE_STACK_LAUNCHER = "launch_resident_evil_stack.py"
 CRT_TOOLS_LAUNCHER = "crt_tools.py"
+LAUNCHBOX_EMULATORS_XML = r"D:\Emulators\LaunchBox\Data\Emulators.xml"
 
 
 def stop_plex_lockers() -> None:
@@ -79,6 +81,15 @@ def run_gaming_session() -> None:
         print(f"Gaming manifest not found: {GAMING_MANIFEST}")
         input("Press Enter to return to menu...")
         return
+
+    # Ensure Intel UHD is primary and CRT refresh is correct before the session starts.
+    # SudoMaker (Moonlight VDD) is irrelevant for LaunchBox sessions -- only the internal
+    # display and CRT are used. Without this, RetroArch may open on SudoMaker instead.
+    print("Restoring display for gaming session...")
+    subprocess.run(
+        [sys.executable, CRT_TOOLS_LAUNCHER, "display", "restore", "--force"],
+        check=False,
+    )
 
     try:
         subprocess.run(
@@ -166,6 +177,48 @@ def restore_resident_evil_stack() -> None:
     input("\nPress Enter to return to menu...")
 
 
+def show_launchbox_retroarch_status() -> None:
+    print("\nChecking LaunchBox RetroArch emulator path...")
+    if not os.path.exists(LAUNCHBOX_EMULATORS_XML):
+        print(f"LaunchBox Emulators.xml not found: {LAUNCHBOX_EMULATORS_XML}")
+        input("\nPress Enter to return...")
+        return
+
+    try:
+        tree = ET.parse(LAUNCHBOX_EMULATORS_XML)
+        root = tree.getroot()
+    except Exception as e:
+        print(f"Failed to read LaunchBox Emulators.xml: {e}")
+        input("\nPress Enter to return...")
+        return
+
+    retro = None
+    for emulator in root.findall("Emulator"):
+        title = (emulator.findtext("Title") or "").strip().lower()
+        if title == "retroarch":
+            retro = emulator
+            break
+
+    if retro is None:
+        print("RetroArch emulator entry not found in LaunchBox Emulators.xml.")
+        input("\nPress Enter to return...")
+        return
+
+    app_path = (retro.findtext("ApplicationPath") or "").strip()
+    command_line = (retro.findtext("CommandLine") or "").strip()
+    is_wrapper = "launchbox_retroarch_wrapper" in app_path.lower()
+
+    print(f"ApplicationPath: {app_path or '(empty)'}")
+    print(f"CommandLine: {command_line or '(empty)'}")
+    if is_wrapper:
+        print("\nStatus: WRAPPER ACTIVE (LaunchBox RetroArch launches through CRT wrapper).")
+        print("This will move/lock RetroArch to the CRT even if CRT Station is not running.")
+    else:
+        print("\nStatus: NORMAL (LaunchBox RetroArch is not using the CRT wrapper path).")
+
+    input("\nPress Enter to return...")
+
+
 def _run_crt_tools(*tool_args: str, pause: bool = True) -> None:
     if not os.path.exists(CRT_TOOLS_LAUNCHER):
         print(f"CRT tools launcher not found: {CRT_TOOLS_LAUNCHER}")
@@ -196,15 +249,16 @@ def crt_tools_menu() -> None:
         print(" 6. Audio Status")
         print(" 7. Session Log (last 40 lines)")
         print(" 8. Session Processes")
-        print(" 9. Restore Display & Audio")
-        print("10. Back")
+        print(" 9. LaunchBox RetroArch Wrapper Status")
+        print("10. Restore Display & Audio")
+        print("11. Back")
         print("    Quick keys: [b] Back, [q] Quit")
         print("========================================")
         try:
-            choice = input("\nSelect an option (1-10): ").strip()
+            choice = input("\nSelect an option (1-11): ").strip()
             if _is_quit(choice):
                 raise SystemExit(0)
-            if _is_back(choice) or choice == '10':
+            if _is_back(choice) or choice == '11':
                 return
             if choice == '1':
                 _run_crt_tools("display", "dump")
@@ -223,6 +277,8 @@ def crt_tools_menu() -> None:
             elif choice == '8':
                 _run_crt_tools("session", "processes")
             elif choice == '9':
+                show_launchbox_retroarch_status()
+            elif choice == '10':
                 restore_display_state()
         except KeyboardInterrupt:
             print("\nInterrupted. Returning to main menu...")
@@ -268,6 +324,16 @@ def main():
                     print("\nRestored files:")
                     for item in restored:
                         print(f" - {item}")
+                if ok:
+                    print("\nRestoring display and audio to default state...")
+                    subprocess.run(
+                        [sys.executable, CRT_TOOLS_LAUNCHER, "display", "restore", "--force"],
+                        check=False,
+                    )
+                    subprocess.run(
+                        [sys.executable, CRT_TOOLS_LAUNCHER, "audio", "restore", "--force"],
+                        check=False,
+                    )
                 input("\nPress Enter to return to menu...")
             elif choice == '7':
                 restore_resident_evil_stack()
