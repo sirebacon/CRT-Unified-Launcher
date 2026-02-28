@@ -5,12 +5,15 @@ process exits or the user ends the session.
 
 Ctrl+C behaviour
 ----------------
-Single Ctrl+C  — Soft stop: moves all active emulator windows back to the
-                 main screen and writes the stop flag so wrapper scripts
-                 disengage.  The session stays alive so the user can launch
-                 another game from BigBox.
+Single Ctrl+C  — Toggle:
+                   Active      → Soft stop: moves emulator windows to the
+                                 main screen, writes stop flag so wrapper
+                                 scripts disengage.  Session stays alive.
+                   Soft-stopped → Re-arm: clears paused state, removes stop
+                                 flag, emulators snap back to CRT on the
+                                 next poll.
 
-Double Ctrl+C  — (within 8 seconds of the first) Full shutdown: moves all
+Double Ctrl+C  — (within 8 seconds) Full shutdown from any state: moves all
                  windows, writes stop flag, returns to caller for config
                  restore.
 
@@ -175,6 +178,23 @@ def _write_stop_flag() -> None:
         print(f"[watcher] WARNING: could not write stop flag: {exc}")
 
 
+def _clear_stop_flag() -> None:
+    try:
+        if os.path.exists(STOP_FLAG):
+            os.remove(STOP_FLAG)
+            print(f"[watcher] Cleared stop flag: {STOP_FLAG}")
+    except Exception as exc:
+        print(f"[watcher] WARNING: could not clear stop flag: {exc}")
+
+
+def _rearm_targets(targets: List[_WatchTarget]) -> None:
+    """Clear paused state on all targets so CRT enforcement resumes."""
+    for target in targets:
+        target.paused = False
+        target.last_hwnd = None
+    _clear_stop_flag()
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -212,31 +232,41 @@ def run(
     rx, ry, rw, rh = restore_rect
 
     # --- Signal handling ---
-    # Single Ctrl+C  → soft stop (emulators to main screen, session continues)
-    # Double Ctrl+C within _SOFT_STOP_WINDOW seconds → full shutdown
+    # Single Ctrl+C (active)       → soft stop (emulators to main screen)
+    # Single Ctrl+C (soft-stopped) → re-arm (emulators snap back to CRT)
+    # Double Ctrl+C within _SOFT_STOP_WINDOW seconds → full shutdown from any state
     _shutting_down = False
     _return_to_menu = False   # True = quiet exit, skip window moves and stop flag
-    _soft_stop = False
+    _soft_stop = False        # signal: process a soft stop this iteration
+    _rearm = False            # signal: process a re-arm this iteration
+    _is_soft_stopped = False  # state: session is currently paused on main screen
     _last_sigint_time = 0.0
     _logged_spawned_exit = False
     _last_heartbeat = time.time()
     _HEARTBEAT_INTERVAL = 60.0  # seconds between "still active" messages
 
     def _on_sigint(signum, frame):
-        nonlocal _shutting_down, _soft_stop, _last_sigint_time
+        nonlocal _shutting_down, _soft_stop, _rearm, _last_sigint_time
         now = time.time()
-        if _soft_stop and (now - _last_sigint_time) < _SOFT_STOP_WINDOW:
+        elapsed = now - _last_sigint_time
+        _last_sigint_time = now
+        # Double Ctrl+C within window → full shutdown from any state.
+        if elapsed < _SOFT_STOP_WINDOW and (_soft_stop or _is_soft_stopped or _rearm):
             print("\n[watcher] Second Ctrl+C — ending session.")
             _shutting_down = True
+            return
+        # Toggle: soft-stopped → re-arm; active → soft stop.
+        if _is_soft_stopped:
+            _rearm = True
         else:
             _soft_stop = True
-        _last_sigint_time = now
 
     signal.signal(signal.SIGINT, _on_sigint)
 
     print(
         f"[watcher] Active — {len(watch_targets)} emulator target(s). "
-        "Ctrl+C to move emulators to main screen. Ctrl+C twice to end session."
+        "Ctrl+C to pause (move to main screen). Ctrl+C again to resume CRT. "
+        "Ctrl+C twice quickly to end session."
     )
 
     # --- Main poll loop ---
@@ -265,11 +295,18 @@ def run(
                     _return_to_menu = True
                     _shutting_down = True
                     break
-                print("[watcher] Ctrl+C — moving emulators to main screen.")
-                print(f"[watcher] Session still active. Ctrl+C again within "
-                      f"{_SOFT_STOP_WINDOW:.0f}s to end session.")
+                print("[watcher] Pausing — moving emulators to main screen.")
+                print("[watcher] Ctrl+C to move back to CRT, or twice quickly to end session.")
                 _soft_stop_targets(watch_targets, rx, ry, rw, rh)
                 _soft_stop = False
+                _is_soft_stopped = True
+
+            # Re-arm: clear paused state so CRT enforcement resumes.
+            if _rearm and not _shutting_down:
+                print("[watcher] Resuming — emulators will snap back to CRT.")
+                _rearm_targets(watch_targets)
+                _is_soft_stopped = False
+                _rearm = False
 
             # Lock emulator windows to CRT.
             for target in watch_targets:

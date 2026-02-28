@@ -1,6 +1,6 @@
 {
   "retroarch": {
-    "_note": "rect (x/y/w/h) is read from profiles/retroarch-session.json — edit there",
+    "_note": "rect (x/y/w/h) is read from profiles/retroarch-session.json \u2014 edit there",
     "path": "D:\\Emulators\\RetroArch-Win64\\retroarch.exe",
     "dir": "D:\\Emulators\\RetroArch-Win64",
     "launchbox_config": "D:\\Emulators\\RetroArch-Win64\\retroarch_crt.cfg"
@@ -18,12 +18,12 @@
     "dir": "D:\\Emulators\\PPSSPPWindowsGold"
   },
   "dolphin": {
-    "_note": "rect (x/y/w/h) is read from profiles/dolphin-session.json — edit there",
+    "_note": "rect (x/y/w/h) is read from profiles/dolphin-session.json \u2014 edit there",
     "path": "D:\\Emulators\\Dolphin-x64\\Dolphin.exe",
     "dir": "D:\\Emulators\\Dolphin-x64"
   },
   "pcsx2": {
-    "_note": "rect (x/y/w/h) is read from profiles/pcsx2-session.json — edit there",
+    "_note": "rect (x/y/w/h) is read from profiles/pcsx2-session.json \u2014 edit there",
     "path": "D:\\Emulators\\Pcsx2\\pcsx2-qt.exe",
     "dir": "D:\\Emulators\\Pcsx2"
   },
@@ -65,6 +65,3 @@
     }
   }
 }
-
-
-

@@ -2,7 +2,10 @@
   "profile_version": 1,
   "path": "D:\\Emulators\\PPSSPPWindowsGold\\PPSSPPWindows64.exe",
   "dir": "D:\\Emulators\\PPSSPPWindowsGold",
-  "process_name": ["ppssppwindows64.exe", "ppssppwindows.exe"],
+  "process_name": [
+    "ppssppwindows64.exe",
+    "ppssppwindows.exe"
+  ],
   "class_contains": [],
   "title_contains": [],
   "x": -1211,
@@ -10,5 +13,5 @@
   "w": 1057,
   "h": 835,
   "poll_slow": 0.4,
-  "_note": "class_contains/title_contains intentionally empty — matched by PID only. Verify with: python launch_generic.py --profile-file profiles/ppsspp-session.json --debug"
+  "_note": "class_contains/title_contains intentionally empty \u2014 matched by PID only. Verify with: python launch_generic.py --profile-file profiles/ppsspp-session.json --debug"
 }

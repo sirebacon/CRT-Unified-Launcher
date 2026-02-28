@@ -2,8 +2,13 @@
   "profile_version": 1,
   "path": "D:\\Emulators\\RetroArch-Win64\\retroarch.exe",
   "dir": "D:\\Emulators\\RetroArch-Win64",
-  "process_name": ["retroarch.exe"],
-  "class_contains": ["sdl_app", "retroarch"],
+  "process_name": [
+    "retroarch.exe"
+  ],
+  "class_contains": [
+    "sdl_app",
+    "retroarch"
+  ],
   "x": -1218,
   "y": 43,
   "w": 1064,

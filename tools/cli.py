@@ -7,6 +7,7 @@ from tools import audio as audio_tools
 from tools import calibration as calibration_tools
 from tools import config as config_tools
 from tools import display as display_tools
+from tools import preset as preset_tools
 from tools import prereqs as prereq_tools
 from tools import session as session_tools
 from tools import windows as window_tools
@@ -120,6 +121,23 @@ def _build_parser() -> argparse.ArgumentParser:
     p_session_flag = sub_session.add_parser("flag", help="Check or clear the wrapper stop flag")
     p_session_flag.add_argument("--clear", action="store_true", help="Remove the flag file")
 
+    # ------------------------------------------------------------------ preset
+    p_preset = sub.add_parser("preset", help="CRT resolution preset management")
+    sub_preset = p_preset.add_subparsers(dest="preset_cmd", required=True)
+
+    sub_preset.add_parser("list", help="Show all presets, mark active with *")
+
+    p_preset_apply = sub_preset.add_parser("apply", help="Apply a named preset to all config targets")
+    p_preset_apply.add_argument("name", help="Preset name (e.g. 1280x960)")
+
+    p_preset_save = sub_preset.add_parser(
+        "save", help="Save current config values as a preset (creates or updates)"
+    )
+    p_preset_save.add_argument(
+        "--name", dest="preset_name", metavar="NAME",
+        help="Preset name to save into (default: currently active preset)",
+    )
+
     # --------------------------------------------------------------- calibrate
     p_cal = sub.add_parser("calibrate", help="Moonlight window calibration")
     sub_cal = p_cal.add_subparsers(dest="calibrate_cmd", required=True)
@@ -213,6 +231,24 @@ def _dispatch(args: argparse.Namespace) -> int:
             return session_tools.session_processes()
         if args.session_cmd == "flag":
             return session_tools.session_flag(clear=args.clear)
+
+    if args.category == "preset":
+        if args.preset_cmd == "list":
+            return preset_tools.print_preset_list(preset_tools.preset_list())
+        if args.preset_cmd == "apply":
+            return preset_tools.print_preset_apply(preset_tools.preset_apply(args.name))
+        if args.preset_cmd == "save":
+            name = args.preset_name
+            if name is None:
+                data = preset_tools.preset_list()
+                if not data.get("ok"):
+                    print(f"[preset] FAIL: cannot determine active preset: {data.get('error')}")
+                    return 1
+                name = data.get("active")
+                if not name:
+                    print("[preset] FAIL: no active preset set — use --name to specify one")
+                    return 1
+            return preset_tools.print_preset_save(preset_tools.preset_save(name))
 
     if args.category == "calibrate":
         if args.calibrate_cmd == "adjust":

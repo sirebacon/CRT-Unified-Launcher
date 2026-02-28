@@ -2,7 +2,10 @@
   "profile_version": 1,
   "path": "D:\\Emulators\\Pcsx2\\pcsx2-qt.exe",
   "dir": "D:\\Emulators\\Pcsx2",
-  "process_name": ["pcsx2-qt.exe", "pcsx2.exe"],
+  "process_name": [
+    "pcsx2-qt.exe",
+    "pcsx2.exe"
+  ],
   "class_contains": [],
   "title_contains": [],
   "x": -1218,
@@ -10,5 +13,5 @@
   "w": 1066,
   "h": 860,
   "poll_slow": 0.4,
-  "_note": "class_contains/title_contains intentionally empty — matched by PID only. Verify with: python launch_generic.py --profile-file profiles/pcsx2-session.json --debug"
+  "_note": "class_contains/title_contains intentionally empty \u2014 matched by PID only. Verify with: python launch_generic.py --profile-file profiles/pcsx2-session.json --debug"
 }

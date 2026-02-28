@@ -2,8 +2,14 @@
   "profile_version": 1,
   "path": "D:\\Emulators\\LaunchBox\\LaunchBox.exe",
   "dir": "D:\\Emulators\\LaunchBox",
-  "process_name": ["launchbox.exe", "bigbox.exe"],
-  "title_contains": ["launchbox", "bigbox"],
+  "process_name": [
+    "launchbox.exe",
+    "bigbox.exe"
+  ],
+  "title_contains": [
+    "launchbox",
+    "bigbox"
+  ],
   "x": -1211,
   "y": 43,
   "w": 1057,

@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(cd D:/Emulators/CRT-Unified-Launcher && python crt_tools.py --help 2>&1)",
+      "Bash(cd D:/Emulators/CRT-Unified-Launcher && python crt_tools.py display dump 2>&1)",
+      "Bash(cd /d/Emulators/CRT-Unified-Launcher && python crt_tools.py display modes --help 2>&1)",
+      "Bash(cd /d/Emulators/CRT-Unified-Launcher && python crt_tools.py display dump 2>&1)",
+      "Bash(head:*)",
+      "Bash(cd /d/Emulators/CRT-Unified-Launcher && python crt_tools.py --help 2>&1)",
+      "Bash(ls:*)",
+      "Bash(cd:*)",
+      "Bash(cd /d/Emulators/CRT-Unified-Launcher && python -c \"\nimport xml.etree.ElementTree as ET, os, glob\n\nplatform_dir = r'D:\\\\Emulators\\\\LaunchBox\\\\Data\\\\Platforms'\nra_id = '5ab34523-f773-4f9b-8fbb-eb93db2f3bfb'\n\nhits = []\nfor xml_path in glob.glob\\(os.path.join\\(platform_dir, '*.xml'\\)\\):\n    try:\n        tree = ET.parse\\(xml_path\\)\n        root = tree.getroot\\(\\)\n    except Exception:\n        continue\n    for child in root:\n        if child.tag == 'Game':\n            continue\n        # Look for any node containing the RetroArch emulator ID\n        for sub in child:\n            if sub.text and ra_id in sub.text:\n                hits.append\\(\\(os.path.basename\\(xml_path\\), child.tag, {c.tag: c.text for c in child}\\)\\)\n                break\n\nfor h in hits:\n    print\\(h[0], h[1]\\)\n    for k, v in h[2].items\\(\\):\n        if v:\n            print\\(f'  {k}: {v}'\\)\n    print\\(\\)\n\" 2>&1)",
+      "Bash(cd /d/Emulators/CRT-Unified-Launcher && python -c \"\nimport xml.etree.ElementTree as ET, sys\n\nra_id = '5ab34523-f773-4f9b-8fbb-eb93db2f3bfb'\n\n# Platforms.xml has per-platform emulator associations with command lines\ntree = ET.parse\\(r'D:\\\\Emulators\\\\LaunchBox\\\\Data\\\\Platforms.xml'\\)\nroot = tree.getroot\\(\\)\nfor child in root:\n    if child.tag != 'EmulatorPlatform':\n        continue\n    eid = child.findtext\\('EmulatorId'\\) or ''\n    if ra_id not in eid:\n        continue\n    d = {c.tag: c.text for c in child if c.text}\n    sys.stdout.buffer.write\\(\\(str\\(d\\) + '\\\\n'\\).encode\\('utf-8'\\)\\)\n\" 2>&1)",
+      "Bash(cd /d/Emulators/CRT-Unified-Launcher && python -c \"\nimport xml.etree.ElementTree as ET, sys\n\n# What node types exist in Platforms.xml?\ntree = ET.parse\\(r'D:\\\\Emulators\\\\LaunchBox\\\\Data\\\\Platforms.xml'\\)\nroot = tree.getroot\\(\\)\ntags = {}\nfor child in root:\n    tags[child.tag] = tags.get\\(child.tag, 0\\) + 1\nprint\\(tags\\)\n\" 2>&1)",
+      "Bash(python:*)"
+    ]
+  }
+}

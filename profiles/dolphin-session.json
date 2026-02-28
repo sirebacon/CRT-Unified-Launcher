@@ -2,7 +2,9 @@
   "profile_version": 1,
   "path": "D:\\Emulators\\Dolphin-x64\\Dolphin.exe",
   "dir": "D:\\Emulators\\Dolphin-x64",
-  "process_name": ["dolphin.exe"],
+  "process_name": [
+    "dolphin.exe"
+  ],
   "class_contains": [],
   "title_contains": [],
   "x": -1218,
@@ -10,5 +12,5 @@
   "w": 1066,
   "h": 835,
   "poll_slow": 0.4,
-  "_note": "class_contains/title_contains intentionally empty — matched by PID only. Verify with: python launch_generic.py --profile-file profiles/dolphin-session.json --debug"
+  "_note": "class_contains/title_contains intentionally empty \u2014 matched by PID only. Verify with: python launch_generic.py --profile-file profiles/dolphin-session.json --debug"
 }
