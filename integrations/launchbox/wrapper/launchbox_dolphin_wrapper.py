@@ -133,8 +133,22 @@ def main() -> int:
     except Exception:
         pass
 
-    # Force windowed mode so Dolphin does not override LaunchBox session behavior.
-    args = [exe, "-C", "Dolphin.Display.Fullscreen=False", *sys.argv[1:]]
+    # Force windowed mode. Strip any Dolphin.Display.Fullscreen override LaunchBox may pass
+    # so the wrapper's Fullscreen=False is always the last word, regardless of arg order.
+    passthrough = []
+    incoming = sys.argv[1:]
+    i = 0
+    while i < len(incoming):
+        if (
+            incoming[i] == "-C"
+            and i + 1 < len(incoming)
+            and incoming[i + 1].lower().startswith("dolphin.display.fullscreen=")
+        ):
+            i += 2  # skip the conflicting pair
+        else:
+            passthrough.append(incoming[i])
+            i += 1
+    args = [exe, "-C", "Dolphin.Display.Fullscreen=False", *passthrough]
     log_debug(f"Launch args: {args}")
     log_debug(f"Target rect: x={x}, y={y}, w={w}, h={h}")
     log_debug(f"Primary rect: x={px}, y={py}, w={pw}, h={ph}")
