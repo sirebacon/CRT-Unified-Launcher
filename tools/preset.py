@@ -18,6 +18,7 @@ _EMULATOR_PROFILE_FILES: Dict[str, str] = {
     "ppsspp":    "ppsspp-session.json",
     "pcsx2":     "pcsx2-session.json",
     "launchbox": "launchbox-session.json",
+    "mpv":       "mpv-session.json",
 }
 
 

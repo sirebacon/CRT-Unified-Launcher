@@ -124,6 +124,13 @@ def run_plex_mode() -> None:
         force_restore_plex()
 
 
+def run_youtube_mode() -> None:
+    try:
+        subprocess.run([sys.executable, "launch_youtube.py"])
+    except KeyboardInterrupt:
+        pass
+
+
 def run_resident_evil_stack_manual() -> None:
     if not os.path.exists(RE_STACK_LAUNCHER):
         print(f"Resident Evil stack launcher not found: {RE_STACK_LAUNCHER}")
@@ -294,17 +301,18 @@ def main():
         print(" 1. [GAMING] Launch RetroArch")
         print(" 2. [GAMING] Launch LaunchBox (Session)")
         print(" 3. [CINEMA] Launch Plex")
-        print(" 4. [GAMING] Launch Resident Evil (Manual Mode)")
-        print(" 5. [TOOLS]  CRT Tools")
-        print(" 6. [TOOLS]  Restore Default Settings")
-        print(" 7. [TOOLS]  Recover Resident Evil Stack")
-        print(" 8. [EXIT]   Close Menu")
+        print(" 4. [CINEMA] Launch YouTube")
+        print(" 5. [GAMING] Launch Resident Evil (Manual Mode)")
+        print(" 6. [TOOLS]  CRT Tools")
+        print(" 7. [TOOLS]  Restore Default Settings")
+        print(" 8. [TOOLS]  Recover Resident Evil Stack")
+        print(" 9. [EXIT]   Close Menu")
         print("    Quick keys: [q] Quit")
         print("========================================")
 
         try:
-            choice = input("\nSelect an option (1-8): ").strip()
-            if _is_quit(choice) or choice == '8':
+            choice = input("\nSelect an option (1-9): ").strip()
+            if _is_quit(choice) or choice == '9':
                 break
             if choice == '1':
                 run_retroarch_mode()
@@ -314,10 +322,12 @@ def main():
             elif choice == '3':
                 run_plex_mode()
             elif choice == '4':
-                run_resident_evil_stack_manual()
+                run_youtube_mode()
             elif choice == '5':
-                crt_tools_menu()
+                run_resident_evil_stack_manual()
             elif choice == '6':
+                crt_tools_menu()
+            elif choice == '7':
                 ok, msg, restored = restore_defaults_from_backup()
                 print(msg)
                 if restored:
@@ -335,7 +345,7 @@ def main():
                         check=False,
                     )
                 input("\nPress Enter to return to menu...")
-            elif choice == '7':
+            elif choice == '8':
                 restore_resident_evil_stack()
         except KeyboardInterrupt:
             print("\nInterrupted. Returning to menu...")

@@ -1,4 +1,6 @@
 {
+  "mpv_path": "D:\\Emulators\\mpv\\mpv.exe",
+  "yt_dlp_path": "D:\\Emulators\\yt-dlp\\yt-dlp_x86.exe",
   "retroarch": {
     "_note": "rect (x/y/w/h) is read from profiles/retroarch-session.json \u2014 edit there",
     "path": "D:\\Emulators\\RetroArch-Win64\\retroarch.exe",
