@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import time
+from urllib.parse import urlparse, parse_qs
 
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 _CRT_CONFIG_PATH = os.path.join(_PROJECT_ROOT, "crt_config.json")
@@ -37,7 +38,7 @@ log = _setup_log()
 sys.path.insert(0, _PROJECT_ROOT)
 import ctypes
 import ctypes.wintypes
-from session.window_utils import find_window, get_rect, move_window
+from session.window_utils import find_window, get_rect, move_window, get_window_title
 from session.mpv_ipc import MpvIpc
 
 # Use ctypes directly for monitor APIs — win32gui doesn't consistently expose
@@ -96,6 +97,14 @@ def _load_json(path: str) -> dict:
         return json.load(f)
 
 
+def _is_playlist_url(url: str) -> bool:
+    """Return True if the URL carries a YouTube playlist parameter."""
+    try:
+        return bool(parse_qs(urlparse(url).query).get("list"))
+    except Exception:
+        return "list=" in url
+
+
 def _load_config():
     """Load mpv_path, yt_dlp_path, and window rect from config files.
 
@@ -145,7 +154,7 @@ def _wait_for_window(pid: int, timeout: float = 15.0):
     return None
 
 
-def _show_now_playing(title: str) -> None:
+def _show_now_playing(title: str, is_playlist: bool = False) -> None:
     os.system('cls' if os.name == 'nt' else 'clear')
     print("========================================")
     print("        NOW PLAYING (YouTube/CRT)")
@@ -157,6 +166,9 @@ def _show_now_playing(title: str) -> None:
     print("  [<- ->]   Seek -10s / +10s")
     print("  [^ v]     Volume +5 / -5")
     print("  [M]       Mute")
+    if is_playlist:
+        print("  [N]       Next video in playlist")
+        print("  [P]       Previous video in playlist")
     print("  [A]       Adjust window position/size")
     print("  [Q]       Quit")
     print("========================================")
@@ -415,10 +427,15 @@ def main() -> int:
     mpv_path, yt_dlp_path, x, y, w, h = _load_config()
     log.info("config: mpv=%s yt_dlp=%s rect=(%d,%d,%d,%d)", mpv_path, yt_dlp_path, x, y, w, h)
 
+    is_playlist = _is_playlist_url(url)
+    log.info("playlist detected: %s", is_playlist)
+
     print("[youtube] Fetching title...")
     title = _fetch_title(yt_dlp_path, url)
     if title:
         print(f"[youtube] Title: {title}")
+    if is_playlist:
+        print("[youtube] Playlist URL detected — autoplay enabled.")
     log.info("title: %r", title)
 
     cmd = [
@@ -428,8 +445,11 @@ def main() -> int:
         "--force-window=yes",
         "--no-keepaspect-window",   # prevent mpv from auto-resizing on external SetWindowPos
         f"--script-opts=ytdl_hook-ytdl_path={yt_dlp_path}",
-        url,
     ]
+    if is_playlist:
+        # Tell yt-dlp to expand the full playlist rather than stopping at this video.
+        cmd.append("--ytdl-raw-options=yes-playlist=")
+    cmd.append(url)
 
     print("[youtube] Launching mpv...")
     log.info("launching mpv: %s", " ".join(cmd))
@@ -460,14 +480,34 @@ def main() -> int:
         else:
             log.info("IPC connected")
 
-        _show_now_playing(title)
+        _show_now_playing(title, is_playlist)
 
         _STEPS = [1, 5, 10, 25, 50, 100, 200, 500, 1000]
         adjust_mode = False
         step_idx = 2  # default 10 px
-        prev_rect = None  # saved before last R fit, restored with Z
+        prev_rect = None  # saved before last R / F, restored with Z
+
+        # Playlist title tracking — poll mpv window title every 2s.
+        # mpv sets the window title to "<media-title> - mpv" as each video starts.
+        prev_win_title: str = ""
+        _title_check_at: float = time.monotonic() + 4.0  # first check after buffering
 
         while proc.poll() is None:
+            # --- Playlist: detect video change via window title ---
+            if is_playlist and hwnd is not None and time.monotonic() >= _title_check_at:
+                _title_check_at = time.monotonic() + 2.0
+                wt = get_window_title(hwnd)
+                if wt and wt != prev_win_title:
+                    prev_win_title = wt
+                    new_t = wt[:-6] if wt.endswith(" - mpv") else wt
+                    if new_t and new_t != title:
+                        title = new_t
+                        log.info("playlist: title changed → %r", title)
+                        if not adjust_mode:
+                            _show_now_playing(title, is_playlist=True)
+                        else:
+                            _show_adjust_mode(title)
+
             if not msvcrt.kbhit():
                 time.sleep(0.05)
                 continue
@@ -606,7 +646,7 @@ def main() -> int:
                         print("\n  IPC not connected.", end="", flush=True)
                 elif ch in (b"a", b"A"):
                     adjust_mode = False
-                    _show_now_playing(title)
+                    _show_now_playing(title, is_playlist)
                 elif ch in (b"q", b"Q", b"\x1b"):
                     ipc.quit()
                     break
@@ -627,6 +667,14 @@ def main() -> int:
                     ipc.toggle_pause()
                 elif ch in (b"m", b"M"):
                     ipc.toggle_mute()
+                elif ch in (b"n", b"N"):
+                    if is_playlist:
+                        ipc.playlist_next()
+                        log.info("playlist: skipped to next video")
+                elif ch in (b"p", b"P"):
+                    if is_playlist:
+                        ipc.playlist_prev()
+                        log.info("playlist: skipped to previous video")
                 elif ch in (b"a", b"A"):
                     adjust_mode = True
                     if hwnd is not None:

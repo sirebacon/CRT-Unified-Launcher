@@ -5,6 +5,7 @@ Windows-based launcher and window-lock system for:
 - RetroArch standalone
 - LaunchBox/BigBox multi-emulator sessions
 - Plex CRT workflows
+- YouTube on CRT via mpv + yt-dlp
 
 ## 1. Requirements
 
@@ -15,6 +16,7 @@ Windows-based launcher and window-lock system for:
   - RetroArch
   - Optional emulators (Dolphin, PPSSPP, PCSX2)
   - Plex (if using cinema mode)
+  - mpv + yt-dlp (if using YouTube mode)
 
 Install Python dependencies:
 
@@ -30,6 +32,7 @@ Update `crt_config.json` to match your machine:
   - `retroarch.path`, `retroarch.dir`
   - `dolphin.path`, `ppsspp.path`, `pcsx2.path` (if used)
   - `plex.path`, `plex.dir` (if used)
+  - `mpv_path`, `yt_dlp_path` (if using YouTube mode)
 - Session defaults
   - `launcher_integration.x/y/w/h`
   - `launcher_integration.primary_on_exit`
@@ -42,6 +45,7 @@ If you use session mode (recommended), verify profiles in `profiles/`:
 - `profiles/dolphin-session.json`
 - `profiles/ppsspp-session.json`
 - `profiles/pcsx2-session.json`
+- `profiles/mpv-session.json` (YouTube on CRT window rect)
 
 ## 3. Validate Before Live Run
 
@@ -59,9 +63,10 @@ This validates manifest/profile/patch paths and performs backup -> patch -> rest
 python crt_station.py
 ```
 
-Recommended path:
+Recommended paths:
 
 - Choose `3` for LaunchBox Session mode.
+- Choose `4` for YouTube on CRT mode.
 
 Session behavior:
 
@@ -146,7 +151,36 @@ Audio switching note:
 
 You can also run these via `python crt_station.py`:
 - Option `5` launches Resident Evil (Manual Mode)
-- Option `6` opens the Tools submenu (includes RE recovery restore)
+- Option `6` opens CRT Tools
+- Option `8` runs RE stack recovery restore
+
+## YouTube on CRT
+
+YouTube mode launches `mpv` with `yt-dlp`, moves the player window to the CRT
+rect from `profiles/mpv-session.json`, and provides keyboard playback controls
+from the terminal.
+
+Use:
+
+```powershell
+python launch_youtube.py --url "https://www.youtube.com/watch?v=..."
+```
+
+Or from menu:
+- `python crt_station.py` -> option `4` `[CINEMA] Launch YouTube`
+
+Required setup:
+- `crt_config.json` must include valid `mpv_path` and `yt_dlp_path`
+- `profiles/mpv-session.json` must have the correct CRT `x/y/w/h`
+- `runtime/youtube.log` is written for troubleshooting
+
+Controls while playing:
+- `[Space]` pause/resume
+- `[Left/Right]` seek -10s/+10s
+- `[Up/Down]` volume +5/-5
+- `[M]` mute
+- `[A]` adjust window mode (move/resize/save/snap/fill)
+- `[Q]` quit
 
 ## Documentation Index
 
@@ -156,4 +190,3 @@ You can also run these via `python crt_station.py`:
 - `docs/usage.md` - menu options and workflow
 - `docs/architecture.md` - session lifecycle and components
 - `docs/TODO.md` - active prioritized work list
-

@@ -61,6 +61,14 @@ def get_rect(hwnd: int) -> Rect:
     return l, t, r - l, b - t
 
 
+def get_window_title(hwnd: int) -> str:
+    """Return the window title text for the given HWND."""
+    try:
+        return win32gui.GetWindowText(hwnd)
+    except Exception:
+        return ""
+
+
 def find_window(
     pid: Optional[int],
     class_contains: List[str],

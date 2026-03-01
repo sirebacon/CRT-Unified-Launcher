@@ -91,3 +91,9 @@ class MpvIpc:
         self.set_property("video-zoom", 0)
         self.set_property("video-pan-x", 0)
         self.set_property("video-pan-y", 0)
+
+    def playlist_next(self) -> bool:
+        return self._send("playlist-next")
+
+    def playlist_prev(self) -> bool:
+        return self._send("playlist-prev")
