@@ -17,26 +17,36 @@ def show_now_playing(
     print("        NOW PLAYING (YouTube/CRT)")
     print("========================================")
     if playlist_pos is not None and playlist_count is not None:
-        print(f"  [{playlist_pos} / {playlist_count}]")
+        print(f"  Playlist: {playlist_pos} / {playlist_count}")
     if title:
-        print(f"  {title}")
+        print(f"  Title: {title}")
         print()
-    print("  [Space]   Pause / Resume")
-    print("  [<- ->]   Seek -10s / +10s")
-    print("  [^ v]     Volume +5 / -5")
-    print("  [M]       Mute")
+
+    print("  Playback")
+    print("  [Space]  Pause / Resume")
+    print("  [<- ->]  Seek -10s / +10s")
+    print("  [^  v]   Volume +5 / -5")
+    print("  [M]      Mute")
     if is_playlist:
-        print("  [N]       Next video in playlist")
-        print("  [P]       Previous video in playlist")
-    print("  [A]       Adjust window position/size")
+        print("  [N]      Next video")
+        print("  [P]      Previous video")
+
+    print()
+    print("  Video / Window")
+    print("  [A]      Adjust window position/size")
     zoom_label = f"ON  ({zoom_preset_name})" if zoom_locked and zoom_preset_name else "OFF"
-    print(f"  [Z]       Zoom preset  [{zoom_label}]")
-    print("  [+]       Add to favorites")
-    print("  [L]       Browse favorites")
-    print("  [H]       Recent history")
-    print("  [B]       Set bookmark at current time")
-    print("  [J]       Jump to bookmark")
-    print("  [Q]       Quit")
+    print(f"  [Z]      Cycle zoom preset [{zoom_label}]")
+
+    print()
+    print("  Library")
+    print("  [+]      Add to favorites")
+    print("  [L]      Browse favorites")
+    print("  [H]      Recent history")
+    print("  [B]      Set bookmark at current time")
+    print("  [J]      Jump to bookmark")
+
+    print()
+    print("  [Q]      Quit")
     print("========================================")
     print()
 
@@ -79,8 +89,7 @@ def show_compact_status(
 ) -> None:
     """One-line compact status shown after auto-hide timeout."""
     idx = f" ({pos}/{count})" if pos is not None and count is not None else ""
-    label = (title[:40] + "...") if len(title) > 43 else title
-    print(f"\r  \u25b6  {label}{idx}    ", end="", flush=True)
+    print(f"\r  \u25b6  YouTube Playing{idx}    ", end="", flush=True)
 
 
 def show_zoom_menu(

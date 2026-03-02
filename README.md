@@ -179,7 +179,9 @@ Controls while playing:
 - `[Left/Right]` seek -10s/+10s
 - `[Up/Down]` volume +5/-5
 - `[M]` mute
+- `[Z]` cycle zoom presets (`Off` -> `default` -> ...)
 - `[A]` adjust window mode (move/resize/save/snap/fill)
+- In adjust mode, use `[P]` to save current zoom/pan as a named preset
 - `[Q]` quit
 
 ## Documentation Index

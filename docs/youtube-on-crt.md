@@ -97,6 +97,7 @@ to mpv via mpv's JSON IPC named pipe (`--input-ipc-server`).
 [M]       Mute
 [N]       Next video in playlist  (playlist URLs only)
 [P]       Previous video in playlist  (playlist URLs only)
+[Z]       Cycle zoom presets (Off â†’ default â†’ ...)
 [A]       Enter Adjust mode
 [+]       Add current URL to favorites
 [L]       Browse favorites menu
@@ -118,6 +119,7 @@ Arrow keys   Move window left/right/up/down
 [S]          Save current rect to profiles/mpv-session.json
 [R]          Snap to preset CRT area + reset zoom/pan
 [F]          Fill CRT height with selected content (drag picker on CRT)
+[P]          Save current zoom/pan as a named preset
 [C]          Clear zoom/pan (show unzoomed letterboxed video)
 [Z]          Revert last R / F (also clears zoom/pan)
 [A]          Back to player controls

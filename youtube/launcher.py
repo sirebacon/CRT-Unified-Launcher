@@ -31,14 +31,12 @@ from youtube.controls import (
     show_adjust_status,
     show_compact_status,
     show_now_playing,
-    show_zoom_menu,
 )
 from youtube.adjust import handle_adjust_key, _STEPS
 from youtube.state import (
     add_bookmark,
     add_favorite,
     add_to_history,
-    add_zoom_preset,
     get_bookmarks,
     load_favorites,
     load_history,
@@ -131,6 +129,43 @@ def _run_history_menu() -> Optional[str]:
         if 0 <= idx < len(recent):
             return recent[idx].get("url")
     return None
+
+
+def _cycle_zoom_preset(
+    zoom_locked: bool,
+    zoom_preset_name: Optional[str],
+    ipc_connected: bool,
+    ipc: MpvIpc,
+) -> tuple[bool, Optional[str], str]:
+    """Cycle zoom mode in this order: Off -> preset1 -> preset2 -> ... -> Off."""
+    presets = load_zoom_presets()
+    order = [None] + [p.get("name") for p in presets if p.get("name")]
+    if not order:
+        if ipc_connected:
+            ipc.reset_zoom_pan()
+        return False, None, "Zoom OFF"
+
+    current = zoom_preset_name if zoom_locked and zoom_preset_name else None
+    if current not in order:
+        current = None
+    next_idx = (order.index(current) + 1) % len(order)
+    next_name = order[next_idx]
+
+    if next_name is None:
+        if ipc_connected:
+            ipc.reset_zoom_pan()
+        log.info("zoom cycle -> OFF")
+        return False, None, "Zoom OFF"
+
+    if ipc_connected:
+        for p in presets:
+            if p.get("name") == next_name:
+                ipc.set_property("video-zoom", p.get("zoom", 0.0))
+                ipc.set_property("video-pan-x", p.get("pan_x", 0.0))
+                ipc.set_property("video-pan-y", p.get("pan_y", 0.0))
+                break
+    log.info("zoom cycle -> %s", next_name)
+    return True, next_name, f"Zoom ON ({next_name})"
 
 
 def run() -> int:
@@ -546,29 +581,11 @@ def run() -> int:
                         time.sleep(0.8)
                     show_now_playing(title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name)
                 elif ch in (b"z", b"Z"):
-                    presets = load_zoom_presets()
-                    show_zoom_menu(presets, zoom_preset_name, zoom_locked)
-                    try:
-                        pick = input().strip().lower()
-                    except (EOFError, KeyboardInterrupt):
-                        pick = ""
-                    if pick == "o":
-                        zoom_locked = False
-                        zoom_preset_name = None
-                        if ipc_connected:
-                            ipc.reset_zoom_pan()
-                        log.info("zoom-lock disabled")
-                    elif pick.isdigit():
-                        idx_ = int(pick) - 1
-                        if 0 <= idx_ < len(presets):
-                            p = presets[idx_]
-                            zoom_locked = True
-                            zoom_preset_name = p["name"]
-                            if ipc_connected:
-                                ipc.set_property("video-zoom",  p["zoom"])
-                                ipc.set_property("video-pan-x", p["pan_x"])
-                                ipc.set_property("video-pan-y", p["pan_y"])
-                            log.info("zoom-lock enabled: %s", zoom_preset_name)
+                    zoom_locked, zoom_preset_name, status = _cycle_zoom_preset(
+                        zoom_locked, zoom_preset_name, ipc_connected, ipc
+                    )
+                    print(f"\n  {status}")
+                    time.sleep(0.5)
                     show_now_playing(title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name)
                 elif ch in (b"q", b"Q", b"\x1b"):
                     ipc.quit()
