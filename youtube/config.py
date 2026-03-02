@@ -26,7 +26,8 @@ def load_config() -> dict:
     """Load all config needed by the launcher.
 
     Returns a dict with keys: mpv_path, yt_dlp_path, x, y, w, h,
-    youtube_audio_device, youtube_quality_presets, youtube_ipc_duplex.
+    youtube_audio_device, youtube_quality_presets, youtube_ipc_duplex,
+    and transition auto-correct tuning flags.
     """
     try:
         cfg = load_json(_CRT_CONFIG_PATH)
@@ -54,6 +55,18 @@ def load_config() -> dict:
         "youtube_audio_device": cfg.get("youtube_audio_device", ""),
         "youtube_quality_presets": cfg.get("youtube_quality_presets", {}),
         "youtube_ipc_duplex": bool(cfg.get("youtube_ipc_duplex", False)),
+        "youtube_transition_autocorrect_enabled": bool(
+            cfg.get("youtube_transition_autocorrect_enabled", True)
+        ),
+        "youtube_transition_watch_sec": float(cfg.get("youtube_transition_watch_sec", 3.0)),
+        "youtube_transition_max_attempts": int(cfg.get("youtube_transition_max_attempts", 6)),
+        "youtube_transition_cooldown_ms": int(cfg.get("youtube_transition_cooldown_ms", 350)),
+        "youtube_transition_required_stable_hits": int(
+            cfg.get("youtube_transition_required_stable_hits", 2)
+        ),
+        "force_final_snap_on_watch_fail": bool(
+            cfg.get("force_final_snap_on_watch_fail", False)
+        ),
     }
 
 

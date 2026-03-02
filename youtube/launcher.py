@@ -13,7 +13,7 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _PROJECT_ROOT)
 
 from session.mpv_ipc import MpvIpc
-from session.window_utils import get_rect, move_window, get_window_title
+from session.window_utils import find_window, get_rect, move_window, get_window_title
 from session.audio import get_current_audio_device_name, set_default_audio_best_effort
 
 from youtube.config import (
@@ -180,6 +180,30 @@ def _cycle_zoom_preset(
     return True, next_name, f"Zoom ON ({next_name})"
 
 
+def _rect_to_text(rect: Optional[tuple[int, int, int, int]]) -> str:
+    if rect is None:
+        return "None"
+    x, y, w, h = rect
+    return f"x={x}, y={y}, w={w}, h={h}"
+
+
+def _rect_matches(
+    got: Optional[tuple[int, int, int, int]],
+    want: tuple[int, int, int, int],
+    tol: int = 2,
+) -> bool:
+    if got is None:
+        return False
+    gx, gy, gw, gh = got
+    wx, wy, ww, wh = want
+    return (
+        abs(gx - wx) <= tol
+        and abs(gy - wy) <= tol
+        and abs(gw - ww) <= tol
+        and abs(gh - wh) <= tol
+    )
+
+
 def _reapply_video_state(
     hwnd: Optional[int],
     x: int,
@@ -190,13 +214,58 @@ def _reapply_video_state(
     ipc: MpvIpc,
     zoom_locked: bool,
     zoom_preset_name: Optional[str],
-) -> None:
+    watch_sec: float = 3.0,
+) -> float:
     """Re-apply window + zoom state after a track/video transition."""
     if hwnd is not None:
+        target = (x, y, w, h)
+        before = None
+        try:
+            before = get_rect(hwnd)
+        except Exception:
+            pass
+        log.info(
+            "transition: reapply window start target=(%s) before=(%s)",
+            _rect_to_text(target),
+            _rect_to_text(before),
+        )
         move_window(hwnd, x, y, w, h, strip_caption=True)
+        time.sleep(0.08)
+        after = None
+        try:
+            after = get_rect(hwnd)
+        except Exception:
+            pass
+
+        if _rect_matches(after, target):
+            log.info("transition: reapply window ok after=(%s)", _rect_to_text(after))
+        else:
+            log.warning(
+                "transition: reapply window drift target=(%s) after=(%s); retrying once",
+                _rect_to_text(target),
+                _rect_to_text(after),
+            )
+            move_window(hwnd, x, y, w, h, strip_caption=True)
+            time.sleep(0.12)
+            after_retry = None
+            try:
+                after_retry = get_rect(hwnd)
+            except Exception:
+                pass
+            if _rect_matches(after_retry, target):
+                log.info("transition: reapply window retry ok after=(%s)", _rect_to_text(after_retry))
+            else:
+                log.error(
+                    "transition: reapply window retry failed target=(%s) after=(%s)",
+                    _rect_to_text(target),
+                    _rect_to_text(after_retry),
+                )
+    else:
+        log.warning("transition: reapply window skipped (hwnd is None)")
 
     if not ipc_connected:
-        return
+        log.info("transition: ipc disconnected; zoom/pan reapply skipped")
+        return time.monotonic() + max(0.5, watch_sec)
 
     if zoom_locked and zoom_preset_name:
         for p in load_zoom_presets():
@@ -205,7 +274,8 @@ def _reapply_video_state(
                 ipc.set_property("video-pan-x", p.get("pan_x", 0.0))
                 ipc.set_property("video-pan-y", p.get("pan_y", 0.0))
                 log.info("re-applied locked zoom preset on transition: %s", zoom_preset_name)
-                return
+                return time.monotonic() + max(0.5, watch_sec)
+        log.warning("transition: zoom lock active but preset not found: %s", zoom_preset_name)
 
     # Fallback: re-apply any previously-set zoom/pan values from IPC cache.
     z = ipc.get_property("video-zoom")
@@ -215,7 +285,10 @@ def _reapply_video_state(
         ipc.set_property("video-zoom", z if z is not None else 0.0)
         ipc.set_property("video-pan-x", px if px is not None else 0.0)
         ipc.set_property("video-pan-y", py if py is not None else 0.0)
-        log.info("re-applied cached zoom/pan on transition")
+        log.info("re-applied cached zoom/pan on transition (z=%s px=%s py=%s)", z, px, py)
+    else:
+        log.info("transition: no cached zoom/pan values to re-apply")
+    return time.monotonic() + max(0.5, watch_sec)
 
 
 def _snap_to_preset_crt(
@@ -276,6 +349,21 @@ def _unsnap_to_profile_rect(
     return x, y, w, h
 
 
+def _get_valid_hwnd(hwnd: Optional[int], pid: int) -> Optional[int]:
+    """Return a valid HWND for mpv, reacquiring by PID when needed."""
+    if hwnd is not None:
+        try:
+            get_rect(hwnd)
+            return hwnd
+        except Exception:
+            pass
+
+    reacquired = find_window(pid, [], [])
+    if reacquired is not None:
+        log.warning("transition-watch: hwnd reacquired to 0x%x", reacquired)
+    return reacquired
+
+
 def run() -> int:
     parser = argparse.ArgumentParser(description="Play a YouTube URL on the CRT via mpv.")
     parser.add_argument("--url", help="YouTube URL to play")
@@ -305,6 +393,14 @@ def run() -> int:
     audio_device_token = cfg.get("youtube_audio_device", "").strip()
     quality_presets = cfg.get("youtube_quality_presets", {})
     use_duplex_ipc = bool(cfg.get("youtube_ipc_duplex", False))
+    transition_autocorrect_enabled = bool(cfg.get("youtube_transition_autocorrect_enabled", True))
+    transition_watch_sec = max(0.5, float(cfg.get("youtube_transition_watch_sec", 3.0)))
+    transition_max_attempts = max(0, int(cfg.get("youtube_transition_max_attempts", 6)))
+    transition_cooldown_sec = max(0.05, int(cfg.get("youtube_transition_cooldown_ms", 350)) / 1000.0)
+    transition_required_stable_hits = max(
+        1, int(cfg.get("youtube_transition_required_stable_hits", 2))
+    )
+    force_final_snap_on_watch_fail = bool(cfg.get("force_final_snap_on_watch_fail", False))
     ui_prefs = load_ui_prefs()
     show_telemetry_panel = bool(ui_prefs.get("show_telemetry_panel", False))
     # Determine URL / queue
@@ -508,6 +604,14 @@ def run() -> int:
         _quit_flag = False
         _last_visible_redraw: float = time.monotonic()
         _last_hidden_status_redraw: float = 0.0
+        _transition_watch_active: bool = False
+        _transition_watch_until: float = 0.0
+        _transition_watch_target: tuple[int, int, int, int] = (x, y, w, h)
+        _transition_watch_attempts: int = 0
+        _transition_watch_stable_hits: int = 0
+        _transition_watch_last_correct_at: float = 0.0
+        _transition_watch_budget_exhausted: bool = False
+        _last_rect_watch_at: float = 0.0
 
         zoom_locked: bool = False
         zoom_preset_name: Optional[str] = None
@@ -547,6 +651,7 @@ def run() -> int:
             if hwnd is not None and now >= _title_check_at:
                 _title_check_at = now + 2.0
                 changed = False
+                changed_reasons = []
 
                 wt = get_window_title(hwnd)
                 if wt and wt != prev_win_title:
@@ -554,8 +659,9 @@ def run() -> int:
                     new_t = wt[:-6] if wt.endswith(" - mpv") else wt
                     if new_t and new_t != title:
                         title = new_t
-                        log.info("title changed → %r", title)
+                        log.info("title changed -> %r", title)
                         changed = True
+                        changed_reasons.append("title")
 
                 if is_playlist and ipc_connected:
                     pos = ipc.get_property("playlist-pos")
@@ -566,13 +672,30 @@ def run() -> int:
                         playlist_pos = new_pos
                         playlist_count = new_count
                         changed = True
+                        changed_reasons.append("playlist")
 
                 if changed:
-                    _reapply_video_state(
+                    log.info(
+                        "transition detected reasons=%s playlist_pos=%s playlist_count=%s title=%r target_rect=x=%d,y=%d,w=%d,h=%d",
+                        ",".join(changed_reasons) if changed_reasons else "unknown",
+                        playlist_pos,
+                        playlist_count,
+                        title,
+                        x, y, w, h,
+                    )
+                    _transition_watch_target = (x, y, w, h)
+                    _transition_watch_until = _reapply_video_state(
                         hwnd, x, y, w, h,
                         ipc_connected, ipc,
                         zoom_locked, zoom_preset_name,
+                        watch_sec=transition_watch_sec,
                     )
+                    _transition_watch_active = True
+                    _transition_watch_attempts = 0
+                    _transition_watch_stable_hits = 0
+                    _transition_watch_last_correct_at = 0.0
+                    _transition_watch_budget_exhausted = False
+                    _last_rect_watch_at = 0.0
                     if not adjust_mode and not controls_hidden:
                         layout = show_now_playing(
                             title, is_playlist, playlist_pos, playlist_count,
@@ -583,6 +706,119 @@ def run() -> int:
                         status_row = layout.get("status_row")
                         status_width = layout.get("width")
                         last_status_text = layout.get("status_text")
+
+            if _transition_watch_active and now > _transition_watch_until:
+                final = None
+                hwnd = _get_valid_hwnd(hwnd, proc.pid)
+                if hwnd is not None:
+                    try:
+                        final = get_rect(hwnd)
+                    except Exception:
+                        final = None
+
+                result = "failed"
+                reason = "timeout_mismatch"
+                target = _transition_watch_target
+                if _rect_matches(final, target):
+                    result = "settled"
+                    reason = "timeout_stable"
+                elif (
+                    force_final_snap_on_watch_fail
+                    and not adjust_mode
+                    and hwnd is not None
+                ):
+                    move_window(hwnd, target[0], target[1], target[2], target[3], strip_caption=True)
+                    time.sleep(0.08)
+                    try:
+                        final = get_rect(hwnd)
+                    except Exception:
+                        final = None
+                    if _rect_matches(final, target):
+                        result = "settled"
+                        reason = "forced_final_snap"
+                    else:
+                        reason = "forced_final_snap_failed"
+                elif _transition_watch_budget_exhausted:
+                    reason = "budget_exhausted"
+
+                log.info(
+                    "transition-watch-end result=%s attempts=%d stable_hits=%d target=(%s) final=(%s) reason=%s",
+                    result,
+                    _transition_watch_attempts,
+                    _transition_watch_stable_hits,
+                    _rect_to_text(target),
+                    _rect_to_text(final),
+                    reason,
+                )
+                _transition_watch_active = False
+
+            if (
+                _transition_watch_active
+                and now <= _transition_watch_until
+                and (now - _last_rect_watch_at) >= 0.35
+            ):
+                _last_rect_watch_at = now
+                target = _transition_watch_target
+                hwnd = _get_valid_hwnd(hwnd, proc.pid)
+                if hwnd is None:
+                    log.warning("transition-watch: hwnd_unavailable")
+                else:
+                    current = None
+                    try:
+                        current = get_rect(hwnd)
+                    except Exception:
+                        pass
+                    if _rect_matches(current, target):
+                        _transition_watch_stable_hits += 1
+                        log.info(
+                            "transition-watch: rect stable hit=%d/%d t+%.2fs current=(%s)",
+                            _transition_watch_stable_hits,
+                            transition_required_stable_hits,
+                            max(0.0, _transition_watch_until - now),
+                            _rect_to_text(current),
+                        )
+                        if _transition_watch_stable_hits >= transition_required_stable_hits:
+                            log.info(
+                                "transition-watch-end result=settled attempts=%d stable_hits=%d target=(%s) final=(%s) reason=stable_hits",
+                                _transition_watch_attempts,
+                                _transition_watch_stable_hits,
+                                _rect_to_text(target),
+                                _rect_to_text(current),
+                            )
+                            _transition_watch_active = False
+                    else:
+                        _transition_watch_stable_hits = 0
+                        log.warning(
+                            "transition-watch: late drift detected target=(%s) current=(%s)",
+                            _rect_to_text(target),
+                            _rect_to_text(current),
+                        )
+                        if not transition_autocorrect_enabled:
+                            pass
+                        elif adjust_mode:
+                            log.info("transition-watch: autocorrect skipped (adjust mode active)")
+                        elif _transition_watch_attempts >= transition_max_attempts:
+                            _transition_watch_budget_exhausted = True
+                            log.warning(
+                                "transition-watch: autocorrect budget exhausted attempts=%d",
+                                _transition_watch_attempts,
+                            )
+                        elif (now - _transition_watch_last_correct_at) >= transition_cooldown_sec:
+                            move_window(
+                                hwnd,
+                                target[0],
+                                target[1],
+                                target[2],
+                                target[3],
+                                strip_caption=True,
+                            )
+                            _transition_watch_attempts += 1
+                            _transition_watch_last_correct_at = now
+                            log.warning(
+                                "transition-watch: autocorrect attempt=%d target=(%s)",
+                                _transition_watch_attempts,
+                                _rect_to_text(target),
+                            )
 
             # Auto-hide after inactivity
             if not adjust_mode and not controls_hidden:
@@ -714,6 +950,22 @@ def run() -> int:
                         print("\n  Previous video.")
                         time.sleep(0.2)
                 elif ch in (b"a", b"A"):
+                    if _transition_watch_active:
+                        final = None
+                        hwnd = _get_valid_hwnd(hwnd, proc.pid)
+                        if hwnd is not None:
+                            try:
+                                final = get_rect(hwnd)
+                            except Exception:
+                                final = None
+                        log.info(
+                            "transition-watch-end result=canceled attempts=%d stable_hits=%d target=(%s) final=(%s) reason=manual_adjust",
+                            _transition_watch_attempts,
+                            _transition_watch_stable_hits,
+                            _rect_to_text(_transition_watch_target),
+                            _rect_to_text(final),
+                        )
+                        _transition_watch_active = False
                     adjust_mode = True
                     if hwnd is not None:
                         x, y, w, h = get_rect(hwnd)
@@ -833,10 +1085,20 @@ def run() -> int:
                     status_width = layout.get("width")
                     last_status_text = layout.get("status_text")
                 elif ch in (b"r", b"R"):
+                    if _transition_watch_active:
+                        log.info("transition-watch: reset reason=manual_snap")
                     x, y, w, h = _snap_to_preset_crt(
                         hwnd, ipc_connected, ipc,
                         x, y, w, h,
                     )
+                    _transition_watch_target = (x, y, w, h)
+                    _transition_watch_until = now + transition_watch_sec
+                    _transition_watch_active = True
+                    _transition_watch_attempts = 0
+                    _transition_watch_stable_hits = 0
+                    _transition_watch_last_correct_at = 0.0
+                    _transition_watch_budget_exhausted = False
+                    _last_rect_watch_at = 0.0
                     layout = show_now_playing(
                         title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
                         telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
@@ -845,10 +1107,20 @@ def run() -> int:
                     status_width = layout.get("width")
                     last_status_text = layout.get("status_text")
                 elif ch in (b"u", b"U"):
+                    if _transition_watch_active:
+                        log.info("transition-watch: reset reason=manual_unsnap")
                     x, y, w, h = _unsnap_to_profile_rect(
                         hwnd, ipc_connected, ipc,
                         x, y, w, h,
                     )
+                    _transition_watch_target = (x, y, w, h)
+                    _transition_watch_until = now + transition_watch_sec
+                    _transition_watch_active = True
+                    _transition_watch_attempts = 0
+                    _transition_watch_stable_hits = 0
+                    _transition_watch_last_correct_at = 0.0
+                    _transition_watch_budget_exhausted = False
+                    _last_rect_watch_at = 0.0
                     layout = show_now_playing(
                         title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
                         telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,

@@ -17,6 +17,7 @@ Single source of truth for active work items.
 - [ ] Tighten emulator profile filters (`process_name`, `class_contains`, `title_contains`) for Dolphin/PPSSPP/PCSX2 with live `--debug` testing.
 - [ ] Decide whether to support parent-process fallback matching (Steam/GOG launcher chains) in option 3.
 - [ ] Document known-good per-core RetroArch settings in a compact reference table.
+- [ ] YouTube playlist window drift: add low-frequency continuous rect guard (outside transition watch) so late mpv resizes are auto-corrected without manual `R`.
 
 ## Later (Low Priority)
 
