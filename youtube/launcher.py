@@ -17,15 +17,18 @@ from session.window_utils import get_rect, move_window, get_window_title
 from session.audio import get_current_audio_device_name, set_default_audio_best_effort
 
 from youtube.config import (
+    _MPV_PROFILE_PATH,
     _PIPE_NAME,
     apply_quality_preset,
     fetch_title,
     is_playlist_url,
     load_config,
+    load_json,
     paste_from_clipboard,
     validate_youtube_url,
 )
 from youtube.player import wait_for_window
+from youtube.player import get_preset_target_rect
 from youtube.controls import (
     build_now_playing_status_text,
     clear_compact_status_line,
@@ -175,6 +178,102 @@ def _cycle_zoom_preset(
                 break
     log.info("zoom cycle -> %s", next_name)
     return True, next_name, f"Zoom ON ({next_name})"
+
+
+def _reapply_video_state(
+    hwnd: Optional[int],
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    ipc_connected: bool,
+    ipc: MpvIpc,
+    zoom_locked: bool,
+    zoom_preset_name: Optional[str],
+) -> None:
+    """Re-apply window + zoom state after a track/video transition."""
+    if hwnd is not None:
+        move_window(hwnd, x, y, w, h, strip_caption=True)
+
+    if not ipc_connected:
+        return
+
+    if zoom_locked and zoom_preset_name:
+        for p in load_zoom_presets():
+            if p.get("name") == zoom_preset_name:
+                ipc.set_property("video-zoom", p.get("zoom", 0.0))
+                ipc.set_property("video-pan-x", p.get("pan_x", 0.0))
+                ipc.set_property("video-pan-y", p.get("pan_y", 0.0))
+                log.info("re-applied locked zoom preset on transition: %s", zoom_preset_name)
+                return
+
+    # Fallback: re-apply any previously-set zoom/pan values from IPC cache.
+    z = ipc.get_property("video-zoom")
+    px = ipc.get_property("video-pan-x")
+    py = ipc.get_property("video-pan-y")
+    if z is not None or px is not None or py is not None:
+        ipc.set_property("video-zoom", z if z is not None else 0.0)
+        ipc.set_property("video-pan-x", px if px is not None else 0.0)
+        ipc.set_property("video-pan-y", py if py is not None else 0.0)
+        log.info("re-applied cached zoom/pan on transition")
+
+
+def _snap_to_preset_crt(
+    hwnd: Optional[int],
+    ipc_connected: bool,
+    ipc: MpvIpc,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+) -> tuple[int, int, int, int]:
+    if hwnd is None:
+        print("\n  Window not found; cannot snap.")
+        time.sleep(0.8)
+        return x, y, w, h
+
+    target = get_preset_target_rect()
+    if target is None:
+        print("\n  Cannot read preset target rect.")
+        time.sleep(0.8)
+        return x, y, w, h
+
+    x, y, w, h = target
+    move_window(hwnd, x, y, w, h, strip_caption=True)
+    if ipc_connected:
+        ipc.reset_zoom_pan()
+    print(f"\n  Snapped to preset CRT area: x={x}, y={y}, w={w}, h={h}")
+    time.sleep(0.8)
+    return x, y, w, h
+
+
+def _unsnap_to_profile_rect(
+    hwnd: Optional[int],
+    ipc_connected: bool,
+    ipc: MpvIpc,
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+) -> tuple[int, int, int, int]:
+    if hwnd is None:
+        print("\n  Window not found; cannot unsnap.")
+        time.sleep(0.8)
+        return x, y, w, h
+    try:
+        profile = load_json(_MPV_PROFILE_PATH)
+        x, y, w, h = profile["x"], profile["y"], profile["w"], profile["h"]
+    except Exception:
+        print("\n  Cannot read saved profile rect.")
+        time.sleep(0.8)
+        return x, y, w, h
+
+    move_window(hwnd, x, y, w, h, strip_caption=True)
+    if ipc_connected:
+        ipc.reset_zoom_pan()
+    print(f"\n  Unsnapped to profile area: x={x}, y={y}, w={w}, h={h}")
+    time.sleep(0.8)
+    return x, y, w, h
 
 
 def run() -> int:
@@ -469,17 +568,11 @@ def run() -> int:
                         changed = True
 
                 if changed:
-                    if zoom_locked and zoom_preset_name and ipc_connected:
-                        for p in load_zoom_presets():
-                            if p["name"] == zoom_preset_name:
-                                ipc.set_property("video-zoom",  p["zoom"])
-                                ipc.set_property("video-pan-x", p["pan_x"])
-                                ipc.set_property("video-pan-y", p["pan_y"])
-                                log.info(
-                                    "zoom-lock re-applied on video change: %s",
-                                    zoom_preset_name,
-                                )
-                                break
+                    _reapply_video_state(
+                        hwnd, x, y, w, h,
+                        ipc_connected, ipc,
+                        zoom_locked, zoom_preset_name,
+                    )
                     if not adjust_mode and not controls_hidden:
                         layout = show_now_playing(
                             title, is_playlist, playlist_pos, playlist_count,
@@ -732,6 +825,30 @@ def run() -> int:
                     )
                     print(f"\n  {status}")
                     time.sleep(0.5)
+                    layout = show_now_playing(
+                        title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                    )
+                    status_row = layout.get("status_row")
+                    status_width = layout.get("width")
+                    last_status_text = layout.get("status_text")
+                elif ch in (b"r", b"R"):
+                    x, y, w, h = _snap_to_preset_crt(
+                        hwnd, ipc_connected, ipc,
+                        x, y, w, h,
+                    )
+                    layout = show_now_playing(
+                        title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                    )
+                    status_row = layout.get("status_row")
+                    status_width = layout.get("width")
+                    last_status_text = layout.get("status_text")
+                elif ch in (b"u", b"U"):
+                    x, y, w, h = _unsnap_to_profile_rect(
+                        hwnd, ipc_connected, ipc,
+                        x, y, w, h,
+                    )
                     layout = show_now_playing(
                         title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
                         telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,

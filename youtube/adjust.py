@@ -218,8 +218,8 @@ def handle_adjust_key(
         else:
             print("\n  IPC not connected.", end="", flush=True)
 
-    elif ch in (b"l", b"L"):
-        # Load saved profile rect and apply it
+    elif ch in (b"l", b"L", b"u", b"U"):
+        # Load saved profile rect and apply it (L/U).
         if hwnd is not None:
             try:
                 profile = load_json(_MPV_PROFILE_PATH)
@@ -227,8 +227,14 @@ def handle_adjust_key(
                 result["prev_rect"] = get_rect(hwnd)
                 x, y, w, h = do_move(hwnd, px, py, pw, ph, step)
                 result.update({"x": x, "y": y, "w": w, "h": h})
-                log.info("L: loaded profile rect (%d,%d,%d,%d)", x, y, w, h)
-                print(f"\n  Loaded profile: x={x}, y={y}, w={w}, h={h}")
+                if ch in (b"u", b"U"):
+                    if ipc_connected:
+                        ipc.reset_zoom_pan()
+                    log.info("U: unsnapped to profile rect (%d,%d,%d,%d)", x, y, w, h)
+                    print(f"\n  Unsnapped to profile: x={x}, y={y}, w={w}, h={h}")
+                else:
+                    log.info("L: loaded profile rect (%d,%d,%d,%d)", x, y, w, h)
+                    print(f"\n  Loaded profile: x={x}, y={y}, w={w}, h={h}")
                 time.sleep(0.5)
                 show_adjust_mode(title)
                 show_adjust_status(x, y, w, h, step)

@@ -201,6 +201,8 @@ def show_now_playing(
     print()
     print("  Video / Window")
     print("  [A]      Adjust window position/size")
+    print("  [R]      Snap to preset CRT area")
+    print("  [U]      Unsnap to saved profile area")
     zoom_label = f"ON  ({zoom_preset_name})" if zoom_locked and zoom_preset_name else "OFF"
     print(f"  [Z]      Cycle zoom preset [{zoom_label}]")
 
@@ -253,6 +255,7 @@ def show_adjust_mode(title: str) -> None:
     print("  [S]          Save rect to profile")
     print("  [L]          Load saved profile rect")
     print("  [R]          Snap to preset CRT area (clears zoom/pan)")
+    print("  [U]          Unsnap to saved profile rect (clears zoom/pan)")
     print("  [F]          Fill CRT with content via zoom (drag to pick on CRT)")
     print("  [P]          Save current zoom/pan as a named preset")
     print("  [C]          Clear zoom/pan (show unzoomed video)")
