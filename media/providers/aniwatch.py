@@ -1,0 +1,153 @@
+"""AniwatchProvider — Tier 2 resolver-backed provider for hianime.to URLs.
+
+Resolves episode URLs by calling integrations/aniwatch-js/resolve.js as a subprocess.
+The Node script returns a JSON payload with the pre-resolved HLS URL and subtitle tracks.
+mpv receives the raw URL with --no-ytdl.
+"""
+
+import json
+import logging
+import os
+import subprocess
+from typing import Optional
+from urllib.parse import urlparse
+
+from media.providers.base import Provider, ProviderCapabilities
+
+log = logging.getLogger("media.aniwatch")
+
+_VALID_HOSTS = {"hianime.to", "www.hianime.to"}
+_DEFAULT_TIMEOUT = 15
+
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_DEFAULT_RESOLVER = os.path.join(
+    _PROJECT_ROOT, "integrations", "aniwatch-js", "resolve.js"
+)
+
+
+class AniwatchProvider(Provider):
+    capabilities = ProviderCapabilities(
+        uses_ytdl=False,
+        supports_playlist=True,
+        supports_title_fetch=True,
+        supports_resume=True,
+        requires_cookies=False,
+    )
+
+    def __init__(
+        self,
+        node_path: str = "node",
+        resolver_path: str = _DEFAULT_RESOLVER,
+        timeout: int = _DEFAULT_TIMEOUT,
+    ):
+        self._node_path = node_path
+        self._resolver_path = resolver_path
+        self._timeout = timeout
+
+    def name(self) -> str:
+        return "HiAnime"
+
+    def can_handle(self, url: str) -> bool:
+        try:
+            return urlparse(url).netloc in _VALID_HOSTS
+        except Exception:
+            return False
+
+    def validate(self, url: str) -> Optional[str]:
+        try:
+            parsed = urlparse(url)
+            if parsed.scheme not in ("http", "https"):
+                return "URL must start with http:// or https://"
+            if parsed.netloc not in _VALID_HOSTS:
+                return f"Not a HiAnime URL (host: {parsed.netloc!r})"
+            if "/watch/" not in parsed.path:
+                return "URL must be a /watch/ episode URL (e.g. hianime.to/watch/slug?ep=id)"
+            if not parsed.query or "ep=" not in parsed.query:
+                return "URL must include an episode ID (?ep=...)"
+            if not self._node_available():
+                return (
+                    "Node.js not found — install Node.js and ensure it is on PATH "
+                    "before using HiAnime provider"
+                )
+            if not os.path.exists(self._resolver_path):
+                return f"HiAnime resolver script not found: {self._resolver_path}"
+            return None
+        except Exception as e:
+            return f"Invalid URL: {e}"
+
+    def resolve_target(self, url: str) -> dict:
+        data = self._run_resolver(url)
+        return {
+            "target_url": data["target_url"],
+            "is_playlist": data.get("is_playlist", False),
+            "extra_mpv_flags": [],
+            "subtitle_urls": data.get("subtitle_urls", []),
+            "extra_headers": data.get("extra_headers", {}),
+            "playlist_items": data.get("playlist_items", []),
+            "current_index": data.get("current_index", 0),
+        }
+
+    def fetch_title(self, url: str) -> str:
+        try:
+            data = self._run_resolver(url)
+            return data.get("episode_title", "")
+        except Exception as e:
+            log.warning("fetch_title failed: %s", e)
+            return ""
+
+    def is_playlist(self, url: str) -> bool:
+        return False  # each hianime.to URL is a single episode
+
+    def mpv_extra_args(self, url: str, quality: str, config: dict) -> list:
+        return ["--no-ytdl"]
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _node_available(self) -> bool:
+        try:
+            subprocess.run(
+                [self._node_path, "--version"],
+                capture_output=True,
+                timeout=5,
+            )
+            return True
+        except Exception:
+            return False
+
+    def _run_resolver(self, url: str) -> dict:
+        if not os.path.exists(self._resolver_path):
+            raise RuntimeError(f"Resolver script not found: {self._resolver_path}")
+
+        log.debug("running resolver: %s %s", self._resolver_path, url)
+
+        try:
+            result = subprocess.run(
+                [self._node_path, self._resolver_path, url],
+                capture_output=True,
+                text=True,
+                timeout=self._timeout,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(
+                f"HiAnime resolver timed out after {self._timeout}s for URL: {url}"
+            )
+        except FileNotFoundError:
+            raise RuntimeError(
+                f"Node.js not found at '{self._node_path}' — install Node.js and "
+                "ensure it is on PATH"
+            )
+
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            raise RuntimeError(f"HiAnime resolver failed: {stderr}")
+
+        stdout = result.stdout.strip()
+        if not stdout:
+            raise RuntimeError("HiAnime resolver returned empty output")
+
+        try:
+            return json.loads(stdout)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"HiAnime resolver returned invalid JSON: {e}")

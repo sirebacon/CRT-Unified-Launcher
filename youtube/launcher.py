@@ -1,4 +1,4 @@
-"""Main YouTube session orchestrator."""
+"""Main media session orchestrator (YouTube, HiAnime, and generic URLs)."""
 
 import argparse
 import logging
@@ -20,13 +20,11 @@ from youtube.config import (
     _MPV_PROFILE_PATH,
     _PIPE_NAME,
     apply_quality_preset,
-    fetch_title,
-    is_playlist_url,
     load_config,
     load_json,
     paste_from_clipboard,
-    validate_youtube_url,
 )
+from media.providers import registry as _provider_registry
 from youtube.player import wait_for_window
 from youtube.player import get_preset_target_rect
 from youtube.controls import (
@@ -387,6 +385,7 @@ def run() -> int:
 
     # Load config
     cfg = load_config()
+    _provider_registry.setup(cfg)
     mpv_path = cfg["mpv_path"]
     yt_dlp_path = cfg["yt_dlp_path"]
     x, y, w, h = cfg["x"], cfg["y"], cfg["w"], cfg["h"]
@@ -424,9 +423,9 @@ def run() -> int:
             pos_str = _fmt_time(session.get("position_sec", 0))
             print(f"           at {pos_str}  ({session['url']})")
             print()
-            print("YouTube URL, V=paste from clipboard, or Enter to resume last:")
+            print("Media URL, V=paste from clipboard, or Enter to resume last:")
         else:
-            print("YouTube URL (or V to paste from clipboard):")
+            print("Media URL (or V to paste from clipboard):")
 
         try:
             user_input = input().strip()
@@ -452,13 +451,16 @@ def run() -> int:
         print("[youtube] No URL provided.")
         return 1
 
-    # Validate URL
+    # Resolve provider and validate URL
+    provider = None
     if url:
-        err = validate_youtube_url(url)
+        provider = _provider_registry.get_provider_or_generic(url)
+        err = provider.validate(url)
         if err:
             log.warning("exit: invalid URL — %s", err)
-            print(f"[youtube] {err}")
+            print(f"[media] {err}")
             return 1
+        log.info("provider selected: %s", provider.name())
 
     # Check for session resume
     resume_to_sec: Optional[float] = None
@@ -483,20 +485,24 @@ def run() -> int:
     # Fetch title
     log.info("=== session start url=%s", url or "(queue)")
 
-    if url:
-        print("[youtube] Fetching title...")
-        title = fetch_title(yt_dlp_path, url)
+    if url and provider and provider.supports_title_fetch:
+        print("[media] Fetching title...")
+        title = provider.fetch_title(url)
         if title:
-            print(f"[youtube] Title: {title}")
+            print(f"[media] Title: {title}")
         else:
-            print("[youtube] Could not fetch title — check yt-dlp path and network")
+            print("[media] Could not fetch title")
             title = ""
+    elif url:
+        title = ""
     else:
         title = "(queue)"
 
-    is_playlist = is_queue or (url is not None and is_playlist_url(url))
+    is_playlist = is_queue or (
+        url is not None and provider is not None and provider.is_playlist(url)
+    )
     if is_playlist and not is_queue:
-        print("[youtube] Playlist URL detected — autoplay enabled.")
+        print("[media] Playlist URL detected — autoplay enabled.")
 
     # Show quality info
     if args.quality and args.quality != "best":
@@ -509,9 +515,17 @@ def run() -> int:
         temp_playlist = build_temp_playlist(queue_urls)
         save_queue(queue_urls)
         target_url = temp_playlist
+        resolved = {"subtitle_urls": [], "extra_headers": {}}
         log.info("queue mode: temp playlist %s (%d items)", temp_playlist, len(queue_urls))
     else:
-        target_url = url
+        resolved = provider.resolve_target(url)
+        target_url = resolved["target_url"]
+        # provider may have a tighter answer on is_playlist than URL inspection
+        is_playlist = resolved.get("is_playlist", is_playlist)
+        log.info(
+            "provider=%s resolved target=%s is_playlist=%s",
+            provider.name(), target_url, is_playlist,
+        )
 
     cmd = [
         mpv_path,
@@ -519,13 +533,26 @@ def run() -> int:
         "--no-border",
         "--force-window=yes",
         "--no-keepaspect-window",
-        f"--script-opts=ytdl_hook-ytdl_path={yt_dlp_path}",
     ]
 
-    if is_playlist and not is_queue:
-        cmd.append("--ytdl-raw-options=yes-playlist=")
+    # yt-dlp hook: queue mode always uses it (queue URLs are YouTube);
+    # single-URL mode defers to the provider's uses_ytdl flag.
+    if is_queue or (provider and provider.uses_ytdl):
+        cmd.append(f"--script-opts=ytdl_hook-ytdl_path={yt_dlp_path}")
 
-    cmd = apply_quality_preset(cmd, args.quality, quality_presets)
+    # Provider-specific args (quality presets, playlist flags, --no-ytdl for Tier 2)
+    if provider and not is_queue:
+        cmd.extend(provider.mpv_extra_args(url, args.quality, cfg))
+    elif is_queue:
+        cmd = apply_quality_preset(cmd, args.quality, quality_presets)
+
+    # Tier 2: subtitle tracks
+    for sub_url in resolved.get("subtitle_urls", []):
+        cmd.append(f"--sub-file={sub_url}")
+
+    # Tier 2: HTTP headers required by the CDN
+    for key, val in resolved.get("extra_headers", {}).items():
+        cmd.append(f"--http-header-fields={key}: {val}")
 
     if resume_to_sec:
         cmd.append(f"--start={resume_to_sec:.1f}")
@@ -540,24 +567,50 @@ def run() -> int:
         _prev_audio = get_current_audio_device_name()
         set_default_audio_best_effort(audio_device_token)
 
-    # Launch mpv
+    # Pre-flight: verify executables exist
+    if not os.path.isfile(mpv_path):
+        log.error("mpv not found at configured path: %s", mpv_path)
+        print(f"[youtube] ERROR: mpv not found: {mpv_path}")
+        return 1
+    if not os.path.isfile(yt_dlp_path):
+        log.error("yt-dlp not found at configured path: %s", yt_dlp_path)
+        print(f"[youtube] ERROR: yt-dlp not found: {yt_dlp_path}")
+        return 1
+    log.debug("pre-flight ok: mpv=%s  yt-dlp=%s", mpv_path, yt_dlp_path)
+
+    # Launch mpv — mpv is a GUI process on Windows so stderr isn't useful;
+    # use --log-file instead so mpv writes its own internal log to disk.
+    _mpv_log_path = os.path.join(_PROJECT_ROOT, "runtime", "mpv.log")
+    cmd.append(f"--log-file={_mpv_log_path}")
+    _mpv_stderr_path = os.path.join(_PROJECT_ROOT, "runtime", "mpv_stderr.log")
+    _mpv_stderr_fh = open(_mpv_stderr_path, "w", encoding="utf-8", errors="replace")
     print("[youtube] Launching mpv...")
     log.info("launching mpv: %s", " ".join(str(c) for c in cmd))
     try:
-        proc = subprocess.Popen(cmd)
+        proc = subprocess.Popen(cmd, stderr=_mpv_stderr_fh)
     except Exception as e:
+        _mpv_stderr_fh.close()
         log.exception("failed to launch mpv: %s", e)
         print(f"[youtube] Failed to launch mpv ({mpv_path}): {e}")
         if _prev_audio:
             set_default_audio_best_effort(_prev_audio)
         return 1
 
-    log.info("mpv pid=%d", proc.pid)
+    log.info("mpv pid=%d  stderr -> %s", proc.pid, _mpv_stderr_path)
     try:
         print(f"[youtube] Waiting for mpv window (PID {proc.pid})...")
         hwnd = wait_for_window(proc.pid)
         if hwnd is None:
-            log.warning("mpv window not found within 15s")
+            early_rc = proc.poll()
+            if early_rc is not None:
+                log.warning(
+                    "mpv exited early (code=%d) before window appeared — "
+                    "check runtime/mpv.log for yt-dlp errors",
+                    early_rc,
+                )
+                print(f"[youtube] mpv exited early (code={early_rc}) — check runtime/mpv.log")
+            else:
+                log.warning("mpv window not found within 15s (mpv still running)")
             print("[youtube] mpv window not found within 15s — continuing without window move.")
         else:
             log.info("mpv window hwnd=0x%x  first move to (%d,%d,%d,%d)", hwnd, x, y, w, h)
@@ -1222,10 +1275,21 @@ def run() -> int:
             log.info("session saved: pos=%.1fs playlist_pos=%s", pos_sec or 0, pl_pos_0)
 
         ipc.close()
+        _mpv_stderr_fh.close()
         rc = proc.poll()
         if rc is not None and rc != 0:
             log.warning("mpv exited with code %d", rc)
-            print(f"[youtube] mpv exited with code {rc} — check youtube.log")
+            print(f"[youtube] mpv exited with code {rc} — check runtime/mpv.log")
+            # Dump last 40 lines of mpv.log (--log-file output) into the session log
+            try:
+                with open(_mpv_log_path, "r", encoding="utf-8", errors="replace") as _f:
+                    _lines = _f.readlines()
+                if _lines:
+                    log.warning("mpv log tail (%d lines total):", len(_lines))
+                    for _l in _lines[-40:]:
+                        log.warning("  mpv| %s", _l.rstrip())
+            except Exception as _e:
+                log.warning("could not read mpv.log: %s", _e)
         else:
             log.info("mpv exited cleanly rc=%s", rc)
 
@@ -1234,6 +1298,10 @@ def run() -> int:
         raise
 
     finally:
+        try:
+            _mpv_stderr_fh.close()
+        except Exception:
+            pass
         if _prev_audio:
             set_default_audio_best_effort(_prev_audio)
         if proc.poll() is None:

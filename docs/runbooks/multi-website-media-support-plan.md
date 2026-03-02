@@ -11,9 +11,9 @@ Make the current YouTube-on-CRT flow reusable for other websites without duplica
 ## Supported Site Categories
 
 Two provider types are supported. They share the same MediaSession, window/snap behavior,
-IPC loop, and telemetry — but differ in how mpv receives the stream URL.
+IPC loop, and telemetry - but differ in how mpv receives the stream URL.
 
-### Tier 1 — yt-dlp-backed providers
+### Tier 1 - yt-dlp-backed providers
 Examples: YouTube, Vimeo, Bilibili, Dailymotion, Twitter/X clips, Reddit videos, TikTok.
 
 mpv invocation:
@@ -29,7 +29,7 @@ A Tier 1 provider is a thin yt-dlp configuration wrapper. It contributes only:
 MediaSession owns the base mpv command. The provider contributes deltas via
 `mpv_extra_args()`. Adding a Tier 1 provider is typically under 50 lines.
 
-### Tier 2 — resolver-backed providers
+### Tier 2 - resolver-backed providers
 Examples: HiAnime (hianime.to), and other JS-rendered anime streaming sites not supported
 by yt-dlp.
 
@@ -50,68 +50,44 @@ The `uses_ytdl: bool` capability flag distinguishes the two tiers. MediaSession 
   bookmarks, and resume are not guaranteed to behave correctly. No special handling planned.
 - **External tool streams (e.g. Twitch via streamlink):** requires a two-step resolution
   outside the yt-dlp path; not a primary use case for CRT playback.
-- **DRM content:** Netflix, Disney+, Amazon Prime Video — Widevine DRM, not playable in mpv
+- **DRM content:** Netflix, Disney+, Amazon Prime Video - Widevine DRM, not playable in mpv
   without a custom CDM build. No plan to support these.
 
 ### JS-Rendered Anime Streaming Sites
-Sites like 9animetv.to, Zoro/Aniwatch, AnimePahe, and similar aggregators render their
-video players entirely in JavaScript. yt-dlp returns `Unsupported URL` for these - they
-are not reachable via the standard yt-dlp hook path.
+Sites like hianime.to, AnimePahe, and similar aggregators render their video players
+entirely in JavaScript. yt-dlp returns `Unsupported URL` for these — they are not
+reachable via the standard yt-dlp hook path. They are handled as **Tier 2** providers.
 
-Three approaches exist, in order of integration effort:
+**Current approach: aniwatch-js resolver bridge**
+The local Node integration at `integrations/aniwatch-js` resolves anime metadata, episode
+servers, and raw stream URLs via the `aniwatch` npm package. The launcher calls
+`resolve.js` as a short-lived subprocess, receives a JSON payload (stream URL, subtitle
+tracks, episode list), and routes the result through `AniwatchProvider` to mpv.
 
-**Option A - aniwatch-js resolver bridge (current direction)**
-Use the local Node integration at `integrations/aniwatch-js` to resolve anime metadata,
-episode servers, and raw stream URLs via the installed `aniwatch` package.
+Status: **Implemented** (2026-03-02). `integrations/aniwatch-js/resolve.js` and
+`media/providers/aniwatch.py` are complete and wired into the provider registry.
 
-Integration pattern: the launcher calls a small Node resolver script (non-interactive),
-receives a resolved stream URL (m3u8/mp4) plus headers/subtitle metadata, and passes the
-URL to mpv as a `GenericProvider` target. This preserves the existing MediaSession model.
+Implementation constraints:
+- Node logic stays isolated to `integrations/aniwatch-js`; Python treats it as an opaque
+  subprocess.
+- Resolver output is JSON; schema is defined by the `resolve_target` contract above.
+- Hard timeout enforced on the subprocess (default 10s); non-zero exit is a hard failure.
 
-Status: **Installed** (2026-03-02). Local package scaffold exists at
-`integrations/aniwatch-js` with dependency `aniwatch@^2.24.3`.
+**Fallback for other JS-rendered sites: custom yt-dlp extractor**
+If a site is not covered by the aniwatch package, a yt-dlp extractor plugin
+(`--extractor-plugins`) is the next option. Requires one-time reverse-engineering of the
+site's video delivery API. Once written, it becomes a Tier 1 provider with no resolver
+subprocess.
 
-Implementation notes:
-- Keep Node logic isolated to `integrations/aniwatch-js`; Python side treats it as an
-  external resolver process.
-- Standardize resolver output as JSON so MediaSession parsing is deterministic.
-- Preserve provider capability flags (`supports_playlist`, `supports_title_fetch`,
-  `supports_resume`) on the Python provider based on resolver support.
-- Keep a timeout/fallback path so launcher startup cannot hang on resolver failures.
-
-Previous `ani-cli` investigation remains valid as background context:
-- `ani-cli` is search-based and not URL-native.
-- For allmanga/allanime URLs specifically, direct API integration is still viable.
-- See `ani-cli-allmanga-investigation.md` for historical findings.
-
-**Option B - custom yt-dlp extractor (best long-term integration)**
-yt-dlp supports local extractor plugins via `--extractor-plugins`. Writing a Python
-extractor for a specific site requires reverse-engineering the site's video delivery API
-(typically visible in browser DevTools network tab as an `.m3u8` or `.mp4` request). Once
-written, the site behaves like any other yt-dlp-backed provider with no changes to the
-launcher architecture.
-
-Effort: medium. Requires one-time reverse-engineering per site. Extractors can break when
-sites update their delivery mechanism.
-
-**Option C — Playwright-based resolver (most powerful, highest effort)**
-A small Python script using [Playwright](https://playwright.dev/python/) launches a
-headless browser, navigates to the URL, intercepts the network request for the media
-stream, and returns the raw URL to the launcher. Works for any JS-rendered site regardless
-of obfuscation. Most resilient to site structure changes since it observes real network
-traffic rather than scraping HTML.
-
-Effort: high. Requires Playwright installation and a per-site wait/intercept script.
-Adds a browser dependency to the launcher stack.
-
-**Recommendation:** proceed with Option A (`aniwatch-js` resolver bridge) as the immediate path for Aniwatch/HiAnime support. Keep Option B (custom yt-dlp extractor) as the long-term fallback for sites where scraper-based resolution proves unstable.
+**Historical context:** ani-cli was evaluated first and ruled out — it is search-based and
+does not accept URLs. See `ani-cli-allmanga-investigation.md` for details.
 
 ## Target Architecture
 
 ### 1. MediaSession (generic)
 Owns:
 - mpv process launch + reconnect behavior
-- base mpv command (pipe name, window flags, yt-dlp hook path)
+- base mpv command (pipe name, window flags, yt-dlp hook path when `uses_ytdl` is True)
 - window placement and adjust mode
 - snap/unsnap and profile rect handling
 - key loop and mode switching
@@ -138,11 +114,15 @@ Each site implements the same contract:
   "extra_mpv_flags": list[str],   # e.g. ["--ytdl-raw-options=yes-playlist="]
   "subtitle_urls": list[str],     # optional; mpv receives as --sub-file=<url> (Tier 2 only)
   "extra_headers": dict,          # optional; passed as --http-header-fields= (Tier 2 only)
+  "playlist_items": list[dict],   # optional; normalized episode list for next/prev
+  "current_index": int,           # optional; index into playlist_items
 }
 ```
 
 Tier 2 providers (resolver-backed) populate `subtitle_urls` and `extra_headers` from the
 resolver JSON output. Tier 1 providers leave these empty.
+If `supports_playlist` is `True`, providers should also populate `playlist_items` and
+`current_index` so MediaSession can provide deterministic episode navigation.
 
 Static capability flags (declared per provider):
 - `uses_ytdl: bool`               # True = yt-dlp hook in mpv command; False = --no-ytdl
@@ -156,7 +136,7 @@ Only capability flags that are `True` have their corresponding UI controls shown
 ### 3. Quality Presets (per-provider)
 Quality presets are **provider-owned**, not global. yt-dlp format selector strings
 (`bestvideo[height<=720]+bestaudio/best[height<=720]`) work for most Tier 1 sites but
-format availability varies — some sites offer only `best`/`worst`, some use named formats.
+format availability varies - some sites offer only `best`/`worst`, some use named formats.
 
 Each provider defines its own quality preset map in `crt_config.json` under its provider
 section. MediaSession passes the quality label through; the provider resolves it to the
@@ -166,14 +146,40 @@ correct format string for that site.
 
 **Tier 1 (yt-dlp-backed):** Auth is a yt-dlp concern, never a MediaSession concern.
 
-- **Cookie file**: `--cookies=/path/to/cookies.txt` — stable, works for most authenticated
-  sites (Patreon, Nebula, private YouTube videos, etc.)
-- **Browser extraction**: `--cookies-from-browser=chrome` — convenient but fragile across
-  browser updates; not recommended for automated playback
+- **Browser extraction**: `--cookies-from-browser=<browser>` — yt-dlp reads cookies
+  directly from the browser's on-disk profile. **On Windows, only Firefox is reliably
+  supported.** Chrome 127+ uses App-Bound Encryption for its cookie store; yt-dlp cannot
+  decrypt it and returns `Failed to decrypt with DPAPI`. Edge has the same restriction.
+- **Cookie file**: `--cookies=/path/to/cookies.txt` — a Netscape-format export (e.g. from
+  the "Get cookies.txt LOCALLY" Chrome extension). Stable but requires periodic re-export
+  as cookies expire.
 
 Both are passed as yt-dlp args via `mpv_extra_args()`. MediaSession never reads or
-manages cookie files directly. If a cookie path is configured, the provider must log the
-resolved path at DEBUG level on each launch so auth failures are diagnosable.
+manages cookie files directly.
+
+**Local config override for cookies:** Cookie settings belong in `crt_config.local.json`
+(gitignored) rather than `crt_config.json` (committed). Copy
+`crt_config.local.json.example` to `crt_config.local.json` and set either:
+```json
+{ "youtube_cookies_from_browser": "firefox" }
+```
+or:
+```json
+{ "youtube_cookies_file": "D:\\path\\to\\cookies.txt" }
+```
+`load_config()` in `youtube/config.py` merges the local file on top of the base config at
+startup. The local file is never committed to git.
+
+**YouTube n-challenge and JS runtime:** YouTube's `n` parameter challenge requires a
+JavaScript runtime to solve. Without it, yt-dlp can only see storyboard images and fails
+with `Requested format is not available`. The `YouTubeProvider` always passes
+`--js-runtimes=node` to yt-dlp via `--ytdl-raw-options`. Node.js must be on PATH (it is
+already required for the AniwatchProvider).
+
+**`--ytdl-raw-options` accumulation:** mpv replaces its `ytdl-raw-options` list each time
+the flag appears on the command line — multiple `--ytdl-raw-options=key=value` flags lose
+all but the last one. `YouTubeProvider.mpv_extra_args()` therefore combines all raw options
+into a single comma-separated flag: `--ytdl-raw-options=js-runtimes=node,cookies-from-browser=firefox`.
 
 **Tier 2 (resolver-backed):** Auth is the resolver subprocess's concern. The Node resolver
 receives any required session tokens or headers via its config input and returns
@@ -188,7 +194,7 @@ A central registry resolves URL -> provider.
 ### 6. Config Separation
 Keep shared config in `crt_config.json`, add provider sections:
 - `providers.youtube`
-- `providers.vimeo`
+- `providers.hianime`
 - etc.
 
 Only provider sections may contain provider-specific flags (cookies, extractor args,
@@ -204,7 +210,7 @@ provider's own config reader.
 ## Existing Code: What Moves Where
 
 Most of the generic session stack already exists in `youtube/`. Phase 0 scope is narrower
-than it appears — only `youtube/config.py` (URL/target logic) and the provider-dispatch
+than it appears - only `youtube/config.py` (URL/target logic) and the provider-dispatch
 section of `youtube/launcher.py` need surgery. The rest moves as-is:
 
 | File | Destination | Notes |
@@ -228,7 +234,7 @@ media/
     controls.py
     player.py
     queue.py
-    session.py      # MediaSession — main orchestration loop
+    session.py      # MediaSession - main orchestration loop
     state.py
     telemetry.py
   providers/
@@ -236,7 +242,7 @@ media/
     generic.py      # GenericProvider fallback
     registry.py
     youtube.py      # Tier 1
-    aniwatch.py     # Tier 2 — calls integrations/aniwatch-js resolver
+    aniwatch.py     # Tier 2 - calls integrations/aniwatch-js resolver
 integrations/
   aniwatch-js/      # Node.js resolver bridge (aniwatch@^2.24.3)
     package.json
@@ -246,46 +252,22 @@ youtube/            # kept as thin shim during transition; removed after Phase 2
 
 ## Rollout Plan
 
-### Phase 0: No Behavior Change Refactor
-- Scaffold `media/providers/base.py` and `media/providers/registry.py`.
-- Move generic modules (`adjust`, `controls`, `player`, `telemetry`, `state`, `queue`) to `media/core/` unchanged.
-- Wrap current YouTube URL/target/title/is_playlist logic in `YouTubeProvider`.
-- Replace provider-specific dispatch in `launcher.py` with registry lookup.
-- Keep `youtube/` as import shims until Phase 1 is complete.
-- Keep all CLI args (`--url`, `--quality`, `--queue-file`, `--add-to-queue`) and all key bindings unchanged.
+### Phase 0: No Behavior Change Refactor ✓ DONE
+- Scaffold `media/providers/base.py` and `media/providers/registry.py`. ✓
+- Wrap current YouTube URL/target/title/is_playlist logic in `YouTubeProvider`. ✓
+- Replace provider-specific dispatch in `launcher.py` with registry lookup. ✓
+- Keep all CLI args (`--url`, `--quality`, `--queue-file`, `--add-to-queue`) and all key bindings unchanged. ✓
+- Note: generic modules (`adjust`, `controls`, etc.) remain in `youtube/` for now; `media/core/` move deferred to a later phase.
 
-Acceptance:
-- Existing YouTube flows behave identically.
-- No changes required in user workflow.
-- `youtube/` shims pass all existing smoke tests.
+### Phase 1: Generic Provider ✓ DONE
+- `GenericProvider` added as fallback (`--no-ytdl`, `supports_*: False`). ✓
 
-### Phase 1: Generic Provider
-- Add `GenericProvider` for direct media URLs and local files that mpv can open natively.
-  `supports_title_fetch: False`, `supports_playlist: False`, `supports_resume: False`.
-- Hide unsupported controls based on capability flags.
-
-Acceptance:
-- Direct URL/file playback works with window and key controls.
-- Controls not applicable to the active provider are not shown.
-
-### Phase 2: Add HiAnime Provider (Tier 2)
-- Write `integrations/aniwatch-js/resolve.js`: accepts a hianime.to episode URL via
-  argv, calls `getEpisodeServers()` then `getAnimeEpisodeSources()`, prints resolved
-  stream URL + subtitle tracks as JSON to stdout, exits non-zero on failure.
-- Add `media/providers/aniwatch.py`: `can_handle` matches `hianime.to` URLs, `resolve_target`
-  calls the Node script as a subprocess with a timeout, parses JSON output.
-- `uses_ytdl: False`, `supports_playlist: True`, `supports_title_fetch: True`,
-  `supports_resume: True`.
-- Document resolver config (Node path, timeout) under `providers.hianime` in `crt_config.json`.
-- Remove `youtube/` shim layer once HiAnime provider is confirmed stable.
-
-Acceptance:
-- hianime.to URL auto-routes to AniwatchProvider without user intervention.
-- Stream plays in mpv with correct window placement and subtitle track available.
-- Resolver subprocess failure (timeout, bad URL, site down) degrades gracefully with a
-  logged error — launcher does not hang.
-- Playlist: episode list fetched, next/prev navigation works.
-- New provider runbook exists (see Definition of Done).
+### Phase 2: Add HiAnime Provider (Tier 2) ✓ DONE (pending live verification)
+- `integrations/aniwatch-js/resolve.js` written and deployed. ✓
+- `media/providers/aniwatch.py` wired to the Node resolver subprocess. ✓
+- `uses_ytdl: False`, `supports_playlist: True`, `supports_title_fetch: True`, `supports_resume: True`. ✓
+- Pending: end-to-end smoke test against a live hianime.to URL.
+- Pending: resolver config section in `crt_config.json` (Node path, timeout currently use code defaults).
 
 ### Phase 3: Capability Matrix and Fallback Rules
 - Capability flags (`supports_playlist`, `supports_title_fetch`, `supports_resume`, etc.)
@@ -301,9 +283,9 @@ Acceptance:
   conditional branches in MediaSession.
 - Auth/cookies can break silently; require explicit log lines for cookie path loaded and
   any extractor errors at DEBUG level.
-- Regression risk if window/snap behavior leaks into provider modules — provider modules
+- Regression risk if window/snap behavior leaks into provider modules - provider modules
   must not call `move_window`, `get_rect`, or any MediaSession function directly.
-- yt-dlp extractor breakage — yt-dlp ships extractor updates frequently; a site that works
+- yt-dlp extractor breakage - yt-dlp ships extractor updates frequently; a site that works
   today may break after an update. Keep yt-dlp updated and treat extractor errors as a
   first suspect when a previously working provider stops resolving URLs.
 - **Resolver subprocess (Tier 2):** The Node resolver is a short-lived process. If it
@@ -316,11 +298,44 @@ Acceptance:
   `providers.hianime.resolver_version` in `crt_config.json` so breakage is diagnosable
   from logs.
 - **Node.js availability:** The resolver requires Node.js on PATH. If Node is missing, the
-  AniwatchProvider must fail at registration time (not at playback time) with a clear
-  message.
+  AniwatchProvider should fail when selected for a matching URL (before playback launch),
+  with a clear error, without impacting unrelated providers.
+
+## Future Scope (not current priority)
+
+Once the Tier 1/Tier 2 provider model is stable and HiAnime is confirmed working, the
+following sites are natural additions. None require changes to MediaSession or the core
+architecture — each is a new provider file and a registry entry.
+
+### Tier 1 additions (yt-dlp-backed, low effort)
+
+| Site | 4:3 content | Notes |
+|------|-------------|-------|
+| Vimeo | Yes | Large archive of classic films, documentaries, and retro content in 4:3 |
+| Dailymotion | Yes | Old TV recordings, classic shows, and retro clips commonly in 4:3 |
+| Rumble | Yes | Retro and archival uploads; VOD only (live streams out of scope) |
+| Twitch VODs | Yes | Retro gaming streams and classic gaming content; VOD only, no live |
+| Bilibili | Yes | Large Japanese/Chinese retro anime and classic game content archive |
+| Kick.com | No | yt-dlp supported; VOD only |
+| NicoNico | No | yt-dlp supported; may need account cookies for some content |
+| Odysee | No | yt-dlp supported |
+| Crunchyroll | No | yt-dlp supported with cookie auth; good anime complement to HiAnime |
+
+### Tier 2 additions (resolver-backed, medium effort)
+
+| Site | Notes |
+|------|-------|
+| AnimePahe | JS-rendered; may be coverable by aniwatch package or needs separate resolver |
+| 9animetv.to | JS-rendered; allanime API viable (see `ani-cli-allmanga-investigation.md`) |
+| Gogoanime | JS-rendered; popular fallback when HiAnime lacks a title |
+
+### Not planned
+- **Funimation** — merged into Crunchyroll; handle via Crunchyroll provider
+- **Live streams** — any site; session-save and resume undefined for live content
+- **DRM content** — Netflix, Disney+, Amazon Prime; Widevine not supported in mpv
 
 ## Non-Goals (for this plan)
-- Live streams — mpv will play them if a live URL is pasted, but session-save, bookmarks,
+- Live streams - mpv will play them if a live URL is pasted, but session-save, bookmarks,
   and resume are not guaranteed to behave correctly. No special handling planned.
 - Full browser automation for DRM/unsupported streams.
 - Site-specific scraping in core modules.
@@ -347,7 +362,7 @@ Acceptance:
   - subtitle URL is passed to mpv and track appears in player
   - resolver timeout (simulated by killing the Node process) is caught and surfaced as
     an error, not a hang
-  - Node not on PATH: AniwatchProvider fails at registration with a clear message
+  - Node not on PATH: AniwatchProvider fails with a clear message when a matching URL is selected
   - aniwatch package returns no sources: provider logs error, does not launch mpv with
     an empty URL
 
@@ -369,16 +384,27 @@ Acceptance:
   - one working Tier 2 example (HiAnime) with resolver JSON contract, timeout config,
     and subtitle passthrough
 
-## Immediate Next Steps
-1. Scaffold `media/providers/base.py` (interface + capability dataclass including
-   `uses_ytdl`) and `media/providers/registry.py`.
-2. Move generic modules to `media/core/` with `youtube/` shims keeping imports working.
-3. Move YouTube URL/target/title/validate/quality logic into `media/providers/youtube.py`.
-4. Replace provider-dispatch in `launcher.py` with registry lookup; keep all CLI args and
-   keys unchanged.
-5. Add `GenericProvider` as fallback.
-6. Write `integrations/aniwatch-js/resolve.js` (accepts hianime.to URL, outputs JSON
-   stream info).
-7. Add `media/providers/aniwatch.py` wired to the Node resolver subprocess.
-8. Verify end-to-end: hianime.to episode URL → resolver → raw HLS → mpv with subtitles.
+## Implementation Status
+
+### Completed (as of 2026-03-02)
+
+- [x] `media/providers/base.py` — `Provider` ABC + `ProviderCapabilities` dataclass
+- [x] `media/providers/registry.py` — URL → provider dispatch, `setup(cfg)`, `get_provider_or_generic(url)`
+- [x] `media/providers/youtube.py` — `YouTubeProvider` (Tier 1): cookie auth, js-runtime, quality presets, combined `--ytdl-raw-options`
+- [x] `media/providers/generic.py` — `GenericProvider` fallback (`--no-ytdl`, accepts any URL)
+- [x] `media/providers/aniwatch.py` — `AniwatchProvider` (Tier 2): calls Node resolver subprocess, timeout, JSON parse
+- [x] `integrations/aniwatch-js/resolve.js` — Node resolver for hianime.to (servers → sources → JSON output)
+- [x] `youtube/launcher.py` — updated to use provider registry; prompts generalized to "Media URL"; mpv command built from provider
+- [x] `crt_config.local.json` pattern — gitignored local override file; `load_config()` merges it on startup
+- [x] `crt_config.local.json.example` — template with cookie key documentation
+- [x] mpv `--log-file` — mpv writes internal log to `runtime/mpv.log` (replaces empty stderr capture)
+
+### Remaining / Not Yet Started
+
+- [ ] `media/core/` — generic modules (`adjust`, `controls`, `player`, `telemetry`, `state`, `queue`) not yet moved from `youtube/`; `youtube/` is still the live implementation, not a shim
+- [ ] Phase 3 capability enforcement — controls not hidden based on provider flags yet
+- [ ] HiAnime end-to-end verification — resolver and AniwatchProvider implemented but not smoke-tested against a live hianime.to URL
+- [ ] `providers.hianime` config section in `crt_config.json` — Node path and timeout still use code defaults
+- [ ] "How to add a provider" runbook
+
 

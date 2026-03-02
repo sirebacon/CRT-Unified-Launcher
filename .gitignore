@@ -10,6 +10,9 @@ runtime/
 .session.lock
 wrapper_stop_enforce.flag
 
+# Local config overrides (may contain cookies/secrets — never commit)
+crt_config.local.json
+
 # Local debug/log outputs
 *_debug.log
 *.log

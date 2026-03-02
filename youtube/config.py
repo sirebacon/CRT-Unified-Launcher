@@ -9,6 +9,7 @@ from urllib.parse import urlparse, parse_qs
 
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CRT_CONFIG_PATH = os.path.join(_PROJECT_ROOT, "crt_config.json")
+_LOCAL_CONFIG_PATH = os.path.join(_PROJECT_ROOT, "crt_config.local.json")
 _MPV_PROFILE_PATH = os.path.join(_PROJECT_ROOT, "profiles", "mpv-session.json")
 _PRESETS_PATH = os.path.join(_PROJECT_ROOT, "crt_presets.json")
 _LOG_PATH = os.path.join(_PROJECT_ROOT, "runtime", "youtube.log")
@@ -34,6 +35,13 @@ def load_config() -> dict:
     except Exception as e:
         print(f"[youtube] Cannot read crt_config.json: {e}")
         sys.exit(1)
+
+    if os.path.exists(_LOCAL_CONFIG_PATH):
+        try:
+            local_cfg = load_json(_LOCAL_CONFIG_PATH)
+            cfg.update(local_cfg)
+        except Exception as e:
+            print(f"[youtube] Warning: crt_config.local.json could not be read: {e}")
 
     mpv_path = cfg.get("mpv_path", "mpv")
     yt_dlp_path = cfg.get("yt_dlp_path", "yt-dlp")
@@ -67,6 +75,8 @@ def load_config() -> dict:
         "force_final_snap_on_watch_fail": bool(
             cfg.get("force_final_snap_on_watch_fail", False)
         ),
+        "youtube_cookies_from_browser": cfg.get("youtube_cookies_from_browser", ""),
+        "youtube_cookies_file": cfg.get("youtube_cookies_file", ""),
     }
 
 

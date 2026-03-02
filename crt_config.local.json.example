@@ -1,0 +1,12 @@
+{
+  "_comment": "Copy this file to crt_config.local.json (gitignored). Keys here override crt_config.json.",
+
+  "_cookie_instructions": [
+    "Set ONE of the two options below — browser OR file, not both.",
+    "cookies_from_browser: browser name (chrome, firefox, edge, brave, opera, chromium, etc.)",
+    "cookies_file: path to a Netscape-format cookies.txt exported from your browser."
+  ],
+
+  "youtube_cookies_from_browser": "firefox",
+  "youtube_cookies_file": ""
+}

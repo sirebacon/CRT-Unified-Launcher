@@ -85,6 +85,96 @@ See `docs/launchbox/generic-wrapper.md` for full CLI reference.
 
 ---
 
+## Media Session — YouTube and Multi-Site Playback (Option 6)
+
+`launch_youtube.py` — launches mpv with yt-dlp or a custom resolver, manages the full
+playback session for YouTube and other media URLs on the CRT display.
+
+```
+launch_youtube.py
+  └── youtube/launcher.py         Main session orchestrator (1250 lines)
+  └── youtube/config.py           Config loading; merges crt_config.local.json on startup
+  └── youtube/player.py           mpv window management (move, snap, geometry)
+  └── youtube/controls.py         Key input loop and mode switching
+  └── youtube/telemetry.py        On-screen info panel; IPC-driven live updates
+  └── youtube/adjust.py           Snap/unsnap and manual rect-adjust mode
+  └── youtube/state.py            Session state persistence (resume position, playlist pos)
+  └── youtube/queue.py            URL queue management (add, next, prev)
+  └── media/providers/
+        base.py                   Provider ABC + ProviderCapabilities dataclass
+        registry.py               URL → provider dispatch; setup(cfg); get_provider_or_generic()
+        youtube.py                Tier 1: yt-dlp-backed (YouTube)
+        aniwatch.py               Tier 2: resolver-backed (hianime.to)
+        generic.py                Fallback: direct URL or local file via --no-ytdl
+  └── integrations/aniwatch-js/
+        resolve.js                Node resolver for hianime.to (outputs JSON to stdout)
+        package.json              aniwatch@^2.24.3
+```
+
+### Provider Dispatch
+
+URLs are matched to the first registered provider that accepts them:
+
+| Tier | Provider | Sites | mpv receives |
+|------|----------|-------|-------------|
+| Tier 1 | `YouTubeProvider` | youtube.com, youtu.be | yt-dlp hook (`--script-opts=ytdl_hook-ytdl_path=...`) |
+| Tier 2 | `AniwatchProvider` | hianime.to | pre-resolved HLS URL from Node subprocess; `--no-ytdl` |
+| Fallback | `GenericProvider` | any URL or file | direct to mpv; `--no-ytdl` |
+
+### Config Files
+
+| File | Purpose |
+|------|---------|
+| `crt_config.json` | Shared config: mpv/yt-dlp paths, quality presets, audio device, IPC mode |
+| `crt_config.local.json` | **Gitignored** local overrides — cookie browser or file path, user-specific keys |
+| `profiles/mpv-session.json` | mpv window rect (x, y, w, h) for the CRT display |
+
+`crt_config.local.json` is never committed. Copy `crt_config.local.json.example` to
+create it. Keys here override `crt_config.json` at load time.
+
+### YouTube Authentication
+
+YouTube requires browser cookies to bypass bot detection. yt-dlp reads them from the
+browser's on-disk profile via `--cookies-from-browser`. On Windows:
+
+- **Firefox** — works. Set `"youtube_cookies_from_browser": "firefox"` in `crt_config.local.json`.
+- **Chrome / Edge** — blocked. Chrome 127+ App-Bound Encryption prevents yt-dlp from
+  reading the cookie store.
+- **Cookie file fallback** — export cookies.txt via browser extension, set
+  `"youtube_cookies_file": "D:\\path\\to\\cookies.txt"` in `crt_config.local.json`.
+
+Node.js must be on PATH (required for AniwatchProvider and for yt-dlp's YouTube n-challenge
+solver). yt-dlp passes `--js-runtimes=node` on every invocation; without it yt-dlp cannot
+select video formats and fails with `Requested format is not available`.
+
+### mpv Command Shape
+
+**Tier 1 (YouTube):**
+```
+mpv --input-ipc-server=\\.\pipe\crt-mpv-ipc
+    --script-opts=ytdl_hook-ytdl_path=<yt-dlp.exe>
+    --ytdl-raw-options=js-runtimes=node,cookies-from-browser=firefox
+    <youtube-url>
+```
+
+**Tier 2 (HiAnime):**
+```
+node resolve.js <hianime-url>    # → JSON: target_url, subtitle_urls, extra_headers
+mpv --no-ytdl --sub-file=<subtitle-url> <resolved-hls-url>
+```
+
+### Diagnostics
+
+| File | Contents |
+|------|---------|
+| `runtime/youtube.log` | Session log: provider selection, mpv command, IPC events, exit code |
+| `runtime/mpv.log` | mpv internal log (via `--log-file`): yt-dlp subprocess output, format errors, hook trace |
+
+See `docs/runbooks/multi-website-media-support-plan.md` for the provider architecture.
+See `docs/runbooks/media-setup.md` for initial setup and troubleshooting.
+
+---
+
 ## Resident Evil Stack — Moonlight Streaming Mode (Option 5 + Tools Recovery)
 
 `launch_resident_evil_stack.py` — orchestrates a Moonlight-based CRT streaming session for Resident Evil 1/2/3 (GOG).
