@@ -25,6 +25,21 @@ Write-Output "none"
     return (proc.stdout or "").strip().lower() or "none"
 
 
+def get_current_audio_device_name() -> Optional[str]:
+    """Return the current default playback device name, or None on failure."""
+    ps = """
+if (Get-Module -ListAvailable -Name AudioDeviceCmdlets) {
+    Import-Module AudioDeviceCmdlets
+    $d = Get-AudioDevice -Playback
+    Write-Output $d.Name; exit 0
+}
+Write-Output "UNKNOWN"; exit 1
+"""
+    proc = _run_powershell(ps)
+    name = (proc.stdout or "").strip()
+    return name if proc.returncode == 0 and name not in ("", "UNKNOWN") else None
+
+
 def set_default_audio_best_effort(name_token: str) -> bool:
     """Set the default playback device to the first device matching name_token.
 

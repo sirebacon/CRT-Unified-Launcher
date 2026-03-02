@@ -30,12 +30,12 @@ emulator window.
 
 ### Why This Works Well
 
-- mpv in windowed mode respects an explicit position and size (`--geometry`).
+- mpv in windowed mode respects an explicit position and size.
 - mpv's OSD (progress bar, time, pause/play indicator) renders **inside** the
   video window — on the CRT, not outside it.
-- Aspect ratio is handled by mpv automatically: 4:3 content fills the window,
-  widescreen content is letterboxed within it.
-- The window can be enforced by the same watcher logic used for emulators.
+- `--no-keepaspect-window` keeps the window at exactly the rect we set;
+  IPC zoom/pan handles content framing independently of OS window size.
+- The window stays fixed after placement; no watcher loop is needed.
 - No browser is involved on the CRT side at all.
 
 ### Dependencies
@@ -45,7 +45,8 @@ emulator window.
 | `mpv` | Video player | https://mpv.io (portable build) |
 | `yt-dlp` | YouTube stream resolver | `pip install yt-dlp` or standalone exe |
 
-Both need to be on PATH or have their paths configured in `crt_config.json`.
+Paths are configured in `crt_config.json` under `mpv_path` and `yt_dlp_path`.
+Defaults: `D:\Emulators\mpv\mpv.exe` and `D:\Emulators\yt-dlp\yt-dlp_x86.exe`.
 
 ---
 
@@ -53,11 +54,11 @@ Both need to be on PATH or have their paths configured in `crt_config.json`.
 
 ```
 1. Browse YouTube on main monitor.
-2. Copy the video URL.
-3. Open CRT Station → [YouTube] option.
+2. Copy the video URL (single video or playlist).
+3. Open CRT Station → [CINEMA] Launch YouTube.
 4. Paste URL when prompted.
 5. mpv opens on the CRT at the calibrated rect.
-6. Control playback (see Control Options below).
+6. Control playback from the Now Playing screen (main monitor).
 7. Quit → CRT Station returns to menu.
 ```
 
@@ -65,82 +66,180 @@ Both need to be on PATH or have their paths configured in `crt_config.json`.
 
 ## CRT Rect
 
-mpv uses the same rect system as emulators. A dedicated entry would be added
-to `crt_presets.json` under `emulator_rects`:
+mpv uses the same rect system as emulators. The entry in `crt_presets.json`
+under `emulator_rects` is:
 
 ```json
-"mpv": {"x": -1218, "y": 43, "w": 1066, "h": 835}
+"mpv": {"x": -1211, "y": 43, "w": 1057, "h": 835}
 ```
 
-This is calibrated the same way as other emulators via
-`python crt_tools.py calibrate adjust`.
-
-A profile file `profiles/mpv-session.json` would follow the same schema as
+The profile file `profiles/mpv-session.json` follows the same schema as
 `dolphin-session.json` etc., so the preset system picks it up automatically.
+Default rect: `x=-1211  y=43  w=1057  h=835`.
+
+Calibration: press `A` in the Now Playing screen to enter Adjust mode, then
+`S` to save the current position, or `R` to snap back to the preset target.
 
 ---
 
-## Control Options
+## Control: mpv IPC (main-monitor keyboard)
 
-Two options depending on physical setup. **One must be chosen before
-implementation.**
+CRT Station shows a Now Playing screen on the main monitor after launch.
+The user types single-key commands there; `launch_youtube.py` forwards them
+to mpv via mpv's JSON IPC named pipe (`--input-ipc-server`).
 
-### Option A — mpv IPC (Recommended for TV/distance use)
-
-CRT Station shows a "Now Playing" screen on the main monitor after launch.
-The user types single-key commands there; CRT Station forwards them to mpv
-via mpv's JSON IPC socket (`--input-ipc-server`).
+### Player mode keys
 
 ```
-Now playing: <title>
-[Space]  Pause / Resume
-[←/→]   Seek -10s / +10s
-[↑/↓]   Volume up / down
-[M]      Mute
-[Q]      Quit
+[Space]   Pause / Resume
+[← →]     Seek -10s / +10s
+[↑ ↓]     Volume +5 / -5
+[M]       Mute
+[N]       Next video in playlist  (playlist URLs only)
+[P]       Previous video in playlist  (playlist URLs only)
+[A]       Enter Adjust mode
+[+]       Add current URL to favorites
+[L]       Browse favorites menu
+[H]       Recent history menu
+[B]       Save bookmark at current timestamp
+[J]       Jump to a saved bookmark
+[Q]       Quit
 ```
 
-Pros: user never needs to touch the CRT side, full control from main monitor.
-Cons: slightly more implementation complexity (IPC socket handling).
+Controls auto-hide after 5 seconds of inactivity. Press any key to restore.
 
-### Option B — Direct mpv window interaction
+### Adjust mode keys (press A to enter, A to exit)
 
-mpv launches normally. The user moves their mouse to the CRT to interact with
-the mpv window directly. mpv's OSD appears on the CRT on hover/keypress.
+```
+Arrow keys   Move window left/right/up/down
+[ / ]        Narrower / Wider
+- / =        Shorter / Taller
+1–9          Step size (1/5/10/25/50/100/200/500/1000 px)
+[S]          Save current rect to profiles/mpv-session.json
+[R]          Snap to preset CRT area + reset zoom/pan
+[F]          Fill CRT height with selected content (drag picker on CRT)
+[C]          Clear zoom/pan (show unzoomed letterboxed video)
+[Z]          Revert last R / F (also clears zoom/pan)
+[A]          Back to player controls
+```
 
-Pros: zero extra code, standard mpv behaviour.
-Cons: requires the user to physically reach the CRT display with the mouse.
+---
+
+## Content Fill (F key)
+
+YouTube videos are 16:9. Many encode 4:3 content with pillar bars inside the
+16:9 frame. The F key fills the CRT height with only the actual picture area:
+
+1. Press F in Adjust mode.
+2. The window snaps to the preset target; zoom/pan resets so the unzoomed
+   letterboxed video is visible.
+3. Drag a cyan rectangle around the actual picture (no encoded bars).
+4. `launch_youtube.py` computes `video-zoom` and `video-pan-x/y` IPC values
+   so that content fills the full window height with equal overscan on each
+   horizontal side (CRT-style).
+5. Press C to clear the zoom at any time. Press R to reset everything.
+
+The OS window stays at the target size (1057×835) throughout — only mpv's
+internal rendering changes. Arrow keys and size adjustments work normally
+after F.
+
+---
+
+## Playlist Support
+
+If the URL contains a `list=` parameter (video-in-playlist or pure playlist
+URL), autoplay is enabled automatically:
+
+- `--ytdl-raw-options=yes-playlist=` is passed to mpv so yt-dlp expands the
+  full playlist.
+- mpv queues and plays each video in sequence without relaunching.
+- The Now Playing screen polls the mpv window title every 2 seconds and
+  updates automatically when the next video starts.
+- N / P keys skip forward or back in the queue.
+- Zoom/pan settings persist across playlist items; press C or F to adjust for
+  a specific video.
 
 ---
 
 ## Resolved Decisions
 
-- **Control option**: Option A (IPC, main-monitor control) implemented.
-  `session/mpv_ipc.py` is a thin named pipe client; `launch_youtube.py`
-  shows a Now Playing screen with keyboard controls using `msvcrt`.
-- **Paths**: `mpv_path` and `yt_dlp_path` in `crt_config.json`.
-  Defaults: `D:\Emulators\mpv\mpv.exe` and `D:\Emulators\yt-dlp\yt-dlp_x86.exe`.
-- **Audio**: mpv plays through the system default audio device (unchanged).
-- **Enforcement**: Single initial move only — mpv does not self-resize.
-- **Queue / repeat**: Single video per session (v1).
+| Decision | Choice |
+|----------|--------|
+| Control option | Option A (IPC, main-monitor keyboard) |
+| Window AR enforcement | `--no-keepaspect-window`; mpv never auto-resizes |
+| Content fill | IPC `video-zoom` + `video-pan-x/y`; window stays fixed |
+| Audio | mpv default audio device (unchanged) |
+| Playlist | Enabled automatically when URL contains `list=` |
+| Rect profile | `profiles/mpv-session.json`; managed by preset system |
 
 ---
 
 ## Files
 
-| File | Status | Purpose |
-|------|--------|---------|
-| `session/mpv_ipc.py` | Created | Thin write-only named pipe IPC client |
-| `profiles/mpv-session.json` | Created | Window profile (same schema as emulators) |
-| `launch_youtube.py` | Created | Orchestrator: URL prompt, mpv launch, IPC control loop |
-| `crt_station.py` | Modified | Added option 4 `[CINEMA] Launch YouTube` |
-| `crt_presets.json` | Modified | Added `mpv` rect to each preset's `emulator_rects` |
-| `crt_config.json` | Modified | Added `mpv_path` and `yt_dlp_path` keys |
-| `tools/preset.py` | Modified | Added `"mpv": "mpv-session.json"` to `_EMULATOR_PROFILE_FILES` |
+| File | Purpose |
+|------|---------|
+| `launch_youtube.py` | Thin entrypoint — delegates to `youtube/launcher.py` |
+| `youtube/launcher.py` | Main orchestration loop (URL prompt, mpv launch, key handling) |
+| `youtube/config.py` | Config loading, URL validation, quality presets, clipboard paste |
+| `youtube/player.py` | Monitor/window helpers, preset rect, IPC fill, region picker |
+| `youtube/controls.py` | Terminal display: Now Playing, Adjust mode, status lines |
+| `youtube/adjust.py` | Adjust-mode key handler (extracted from main loop) |
+| `youtube/state.py` | Session, favorites, history, bookmarks (JSON-backed) |
+| `youtube/queue.py` | Queue file loading/saving |
+| `session/mpv_ipc.py` | Named pipe IPC client — commands + `get_property` + `seek_absolute` |
+| `session/audio.py` | Audio helpers; `get_current_audio_device_name` added |
+| `session/_region_picker.py` | Subprocess tkinter overlay for content-area drag selection |
+| `session/window_utils.py` | Shared Win32 helpers |
+| `profiles/mpv-session.json` | Window profile; managed by preset system |
+| `crt_station.py` | `[CINEMA] Launch YouTube` menu option |
+| `crt_presets.json` | `mpv` rect in each preset's `emulator_rects` |
+| `crt_config.json` | `mpv_path`, `yt_dlp_path`, `youtube_audio_device`, `youtube_quality_presets` |
+| `tools/preset.py` | `"mpv": "mpv-session.json"` in `_EMULATOR_PROFILE_FILES` |
+| `runtime/youtube_session.json` | Last session state (URL, position, playlist index) |
+| `runtime/youtube_favorites.json` | Saved favorites |
+| `runtime/youtube_history.json` | Playback history (capped at 200) |
+| `runtime/youtube_bookmarks.json` | Per-URL timestamp bookmarks |
+| `runtime/youtube_queue.json` | Saved URL queue |
 
 ---
 
-## Non-Goals (v1)
+## Additional Features
+
+### Audio device override
+
+Set `youtube_audio_device` in `crt_config.json` to a device name token (e.g. `"Speakers"`)
+to automatically switch the default playback device on launch and restore it on exit.
+Empty string (default) means no switching.
+
+### Quality presets
+
+Pass `--quality <name>` to `launch_youtube.py`. Available presets defined in
+`crt_config.json` under `youtube_quality_presets`: `best` (default), `720p`, `480p`, `audio`.
+
+### Queue file
+
+`--queue-file <path>` loads a `.txt` (one URL per line) or `.json` (list) and plays
+them in sequence. `--add-to-queue <url>` appends to `runtime/youtube_queue.json` and exits.
+
+### Resume last session
+
+On exit, the current playback position and playlist index are saved to
+`runtime/youtube_session.json`. On the next launch with the same URL, you are prompted
+to resume from where you left off.
+
+### Favorites and history
+
+- `[+]` adds the current URL/title to `runtime/youtube_favorites.json`.
+- `[L]` opens the favorites menu (numbered list; pick to see URL).
+- `[H]` shows the last 10 history entries.
+- History is automatically recorded on each launch; capped at 200 entries.
+
+### Bookmarks
+
+- `[B]` saves a named timestamp for the current URL to `runtime/youtube_bookmarks.json`.
+- `[J]` shows the bookmark list; pick a number to seek to that position via IPC.
+
+## Non-Goals
 
 - No browser on the CRT.
 - No YouTube search or browse interface in CRT Station.

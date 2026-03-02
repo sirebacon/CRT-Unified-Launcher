@@ -1,6 +1,13 @@
 {
   "mpv_path": "D:\\Emulators\\mpv\\mpv.exe",
   "yt_dlp_path": "D:\\Emulators\\yt-dlp\\yt-dlp_x86.exe",
+  "youtube_audio_device": "",
+  "youtube_quality_presets": {
+    "best":  {},
+    "720p":  {"ytdl_format": "bestvideo[height<=720]+bestaudio/best[height<=720]"},
+    "480p":  {"ytdl_format": "bestvideo[height<=480]+bestaudio/best[height<=480]"},
+    "audio": {"ytdl_format": "bestaudio"}
+  },
   "retroarch": {
     "_note": "rect (x/y/w/h) is read from profiles/retroarch-session.json \u2014 edit there",
     "path": "D:\\Emulators\\RetroArch-Win64\\retroarch.exe",
