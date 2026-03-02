@@ -23,7 +23,7 @@
 const { HiAnime } = require("aniwatch");
 
 // Server preference order: pick the first available from this list.
-const SERVER_PREFERENCE = ["vidstreaming", "streamsb", "streamtape", "vidcloud"];
+const SERVER_PREFERENCE = ["hd-1", "hd-2", "hd-3"];
 
 async function resolve(url) {
     const scraper = new HiAnime.Scraper();
@@ -71,7 +71,7 @@ async function resolve(url) {
     // --- Get sources ---
     let sourcesData;
     try {
-        sourcesData = await scraper.getAnimeEpisodeSources(episodeId, serverName, "sub");
+        sourcesData = await scraper.getEpisodeSources(episodeId, serverName, "sub");
     } catch (err) {
         throw new Error(
             `Failed to fetch sources from server "${serverName}": ${err.message}`
@@ -94,9 +94,10 @@ async function resolve(url) {
     }
 
     // --- Subtitle tracks ---
+    // Track format from aniwatch package: { url, lang } — filter out thumbnails track.
     const subtitleUrls = (sourcesData.tracks || [])
-        .filter((t) => t.kind === "captions" || t.kind === "subtitles")
-        .map((t) => t.file)
+        .filter((t) => t.lang && t.lang.toLowerCase() !== "thumbnails")
+        .map((t) => t.url || t.file)
         .filter(Boolean);
 
     // --- Extra headers (Referer required by some CDNs) ---

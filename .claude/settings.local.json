@@ -15,7 +15,8 @@
       "Bash(cd /d/Emulators/CRT-Unified-Launcher && python -c \"\nimport xml.etree.ElementTree as ET, sys\n\n# What node types exist in Platforms.xml?\ntree = ET.parse\\(r'D:\\\\Emulators\\\\LaunchBox\\\\Data\\\\Platforms.xml'\\)\nroot = tree.getroot\\(\\)\ntags = {}\nfor child in root:\n    tags[child.tag] = tags.get\\(child.tag, 0\\) + 1\nprint\\(tags\\)\n\" 2>&1)",
       "Bash(python:*)",
       "Bash(\"D:\\\\Emulators\\\\yt-dlp\\\\yt-dlp_x86.exe\":*)",
-      "Bash(\"D:/Emulators/yt-dlp/yt-dlp_x86.exe\":*)"
+      "Bash(\"D:/Emulators/yt-dlp/yt-dlp_x86.exe\":*)",
+      "Bash(node:*)"
     ]
   }
 }

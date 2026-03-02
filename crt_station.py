@@ -301,7 +301,7 @@ def main():
         print(" 1. [GAMING] Launch RetroArch")
         print(" 2. [GAMING] Launch LaunchBox (Session)")
         print(" 3. [CINEMA] Launch Plex")
-        print(" 4. [CINEMA] Launch YouTube")
+        print(" 4. [CINEMA] Launch Media (YouTube / HiAnime / URL)")
         print(" 5. [GAMING] Launch Resident Evil (Manual Mode)")
         print(" 6. [TOOLS]  CRT Tools")
         print(" 7. [TOOLS]  Restore Default Settings")

@@ -8,9 +8,12 @@ mpv receives the raw URL with --no-ytdl.
 import json
 import logging
 import os
+import re
 import subprocess
 from typing import Optional
 from urllib.parse import urlparse
+
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 from media.providers.base import Provider, ProviderCapabilities
 
@@ -143,11 +146,19 @@ class AniwatchProvider(Provider):
             stderr = result.stderr.strip()
             raise RuntimeError(f"HiAnime resolver failed: {stderr}")
 
-        stdout = result.stdout.strip()
-        if not stdout:
-            raise RuntimeError("HiAnime resolver returned empty output")
+        # The aniwatch package writes INFO log lines (with ANSI colour codes) to stdout
+        # alongside our JSON result. Strip colour codes and scan for the JSON line.
+        json_line = None
+        for line in result.stdout.splitlines():
+            line = _ANSI_ESCAPE.sub("", line).strip()
+            if line.startswith("{"):
+                json_line = line
+                break
+
+        if not json_line:
+            raise RuntimeError("HiAnime resolver returned no JSON output")
 
         try:
-            return json.loads(stdout)
+            return json.loads(json_line)
         except json.JSONDecodeError as e:
             raise RuntimeError(f"HiAnime resolver returned invalid JSON: {e}")
