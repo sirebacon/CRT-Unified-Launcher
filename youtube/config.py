@@ -26,7 +26,7 @@ def load_config() -> dict:
     """Load all config needed by the launcher.
 
     Returns a dict with keys: mpv_path, yt_dlp_path, x, y, w, h,
-    youtube_audio_device, youtube_quality_presets.
+    youtube_audio_device, youtube_quality_presets, youtube_ipc_duplex.
     """
     try:
         cfg = load_json(_CRT_CONFIG_PATH)
@@ -53,6 +53,7 @@ def load_config() -> dict:
         "h": h,
         "youtube_audio_device": cfg.get("youtube_audio_device", ""),
         "youtube_quality_presets": cfg.get("youtube_quality_presets", {}),
+        "youtube_ipc_duplex": bool(cfg.get("youtube_ipc_duplex", False)),
     }
 
 

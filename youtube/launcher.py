@@ -196,7 +196,7 @@ def run() -> int:
     x, y, w, h = cfg["x"], cfg["y"], cfg["w"], cfg["h"]
     audio_device_token = cfg.get("youtube_audio_device", "").strip()
     quality_presets = cfg.get("youtube_quality_presets", {})
-
+    use_duplex_ipc = bool(cfg.get("youtube_ipc_duplex", False))
     # Determine URL / queue
     url: Optional[str] = args.url
     is_queue = False
@@ -356,14 +356,14 @@ def run() -> int:
             print(f"[youtube] Window found. Moving to CRT rect ({x}, {y}, {w}x{h})...")
             move_window(hwnd, x, y, w, h, strip_caption=True)
 
-        ipc = MpvIpc()
+        ipc = MpvIpc(use_duplex=use_duplex_ipc)
         ipc_connected = ipc.connect(retries=10, delay=0.5)
         if not ipc_connected:
             log.warning("IPC connection failed")
             print("[youtube] WARNING: IPC connection failed — keyboard control unavailable.")
             print("[youtube] Hint: check pipe name and mpv --input-ipc-server support.")
         else:
-            log.info("IPC connected")
+            log.info("IPC connected (mode=%s, requested_duplex=%s)", ipc.mode, use_duplex_ipc)
             # Re-apply rect after IPC is up: mpv can briefly override the window
             # position while it finishes initialising (loading video, codec setup).
             if hwnd is not None:
@@ -628,3 +628,4 @@ def run() -> int:
     log.info("=== session end")
     print("[youtube] Done.")
     return 0
+

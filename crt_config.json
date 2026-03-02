@@ -1,6 +1,7 @@
 {
   "mpv_path": "D:\\Emulators\\mpv\\mpv.exe",
   "yt_dlp_path": "D:\\Emulators\\yt-dlp\\yt-dlp_x86.exe",
+  "youtube_ipc_duplex": true,
   "youtube_audio_device": "",
   "youtube_quality_presets": {
     "best":  {},
