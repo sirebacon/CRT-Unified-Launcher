@@ -125,6 +125,8 @@ def show_now_playing(
     zoom_preset_name: Optional[str] = None,
     telemetry: Optional[dict] = None,
     show_advanced_telemetry: bool = False,
+    episode_has_next: bool = False,
+    episode_has_prev: bool = False,
 ) -> None:
     width = _term_width()
     rule = "=" * min(80, max(40, width))
@@ -197,6 +199,11 @@ def show_now_playing(
     if is_playlist:
         print("  [N]      Next video")
         print("  [P]      Previous video")
+    elif episode_has_next or episode_has_prev:
+        if episode_has_next:
+            print("  [N]      Next episode")
+        if episode_has_prev:
+            print("  [P]      Previous episode")
 
     print()
     print("  Video / Window")

@@ -362,6 +362,52 @@ def _get_valid_hwnd(hwnd: Optional[int], pid: int) -> Optional[int]:
     return reacquired
 
 
+def _mpv_exited_at_eof(log_path: str) -> bool:
+    """Return True if mpv.log records a natural end-of-file exit."""
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            return "End of file" in f.read()
+    except Exception:
+        return False
+
+
+def _autoplay_countdown(next_url: str, next_title: str, seconds: int = 5) -> Optional[str]:
+    """Show a countdown and return next_url when the timer elapses.
+
+    Keys accepted during the countdown:
+      N       — play immediately
+      C / Q / ESC — cancel autoplay
+
+    Returns next_url to proceed, or None if cancelled.
+    """
+    # Drain any buffered keypresses that accumulated during playback.
+    while msvcrt.kbhit():
+        msvcrt.getch()
+
+    label = next_title if next_title else next_url
+    print()
+    for remaining in range(seconds, 0, -1):
+        print(
+            f"\r  Next: {label}  —  starting in {remaining}s  "
+            "[N=play now  C/Q=cancel]     ",
+            end="",
+            flush=True,
+        )
+        deadline = time.monotonic() + 1.0
+        while time.monotonic() < deadline:
+            if msvcrt.kbhit():
+                ch = msvcrt.getch()
+                if ch in (b"n", b"N"):
+                    print()
+                    return next_url
+                if ch in (b"c", b"C", b"q", b"Q", b"\x1b"):
+                    print("\n  Autoplay cancelled.")
+                    return None
+            time.sleep(0.05)
+    print()
+    return next_url
+
+
 def run() -> int:
     parser = argparse.ArgumentParser(description="Play a YouTube URL on the CRT via mpv.")
     parser.add_argument("--url", help="YouTube URL to play")
@@ -527,6 +573,13 @@ def run() -> int:
             provider.name(), target_url, is_playlist,
         )
 
+    # Episode nav flags (only populated for HiAnime; False/empty for everything else)
+    _ep_has_next = bool(resolved.get("has_next", False))
+    _ep_has_prev = bool(resolved.get("has_prev", False))
+    _ep_next_url = resolved.get("next_episode_url") or ""
+    _ep_prev_url = resolved.get("prev_episode_url") or ""
+    _ep_next_title = resolved.get("next_episode_title") or ""
+
     cmd = [
         mpv_path,
         f"--input-ipc-server={_PIPE_NAME}",
@@ -581,8 +634,14 @@ def run() -> int:
     # Launch mpv — mpv is a GUI process on Windows so stderr isn't useful;
     # use --log-file instead so mpv writes its own internal log to disk.
     _mpv_log_path = os.path.join(_PROJECT_ROOT, "runtime", "mpv.log")
+    # Force a fresh file each run so tails only show current-session events.
+    with open(_mpv_log_path, "w", encoding="utf-8", errors="replace"):
+        pass
     cmd.append(f"--log-file={_mpv_log_path}")
     _mpv_stderr_path = os.path.join(_PROJECT_ROOT, "runtime", "mpv_stderr.log")
+    # Keep stderr file fresh per run as well.
+    with open(_mpv_stderr_path, "w", encoding="utf-8", errors="replace"):
+        pass
     _mpv_stderr_fh = open(_mpv_stderr_path, "w", encoding="utf-8", errors="replace")
     print("[youtube] Launching mpv...")
     log.info("launching mpv: %s", " ".join(str(c) for c in cmd))
@@ -657,6 +716,8 @@ def run() -> int:
         _last_keypress: float = time.monotonic()
         controls_hidden: bool = False
         _quit_flag = False
+        _hianime_skip_to_next = False
+        _hianime_skip_to_prev = False
         _last_visible_redraw: float = time.monotonic()
         _last_hidden_status_redraw: float = 0.0
         _transition_watch_active: bool = False
@@ -678,7 +739,7 @@ def run() -> int:
             zoom_locked=zoom_locked,
             zoom_preset_name=zoom_preset_name,
             telemetry=last_telemetry,
-            show_advanced_telemetry=show_telemetry_panel,
+            show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
         )
         status_row = layout.get("status_row")
         status_width = layout.get("width")
@@ -713,7 +774,12 @@ def run() -> int:
                 if wt and wt != prev_win_title:
                     prev_win_title = wt
                     new_t = wt[:-6] if wt.endswith(" - mpv") else wt
-                    if new_t and new_t != title:
+                    # Ignore raw stream filenames (HLS manifests, raw video files)
+                    # that mpv shows as the window title when no metadata is present.
+                    _is_stream_filename = new_t.lower().endswith(
+                        (".m3u8", ".m3u", ".mp4", ".ts", ".mkv", ".webm", ".mov")
+                    )
+                    if new_t and new_t != title and not _is_stream_filename:
                         title = new_t
                         log.info("title changed -> %r", title)
                         changed = True
@@ -757,7 +823,7 @@ def run() -> int:
                             title, is_playlist, playlist_pos, playlist_count,
                             zoom_locked, zoom_preset_name,
                             telemetry=last_telemetry,
-                            show_advanced_telemetry=show_telemetry_panel,
+                            show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
                         )
                         status_row = layout.get("status_row")
                         status_width = layout.get("width")
@@ -972,7 +1038,7 @@ def run() -> int:
                             title, is_playlist, playlist_pos, playlist_count,
                             zoom_locked, zoom_preset_name,
                             telemetry=last_telemetry,
-                            show_advanced_telemetry=show_telemetry_panel,
+                            show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
                         )
                         status_row = layout.get("status_row")
                         status_width = layout.get("width")
@@ -1003,7 +1069,7 @@ def run() -> int:
                     title, is_playlist, playlist_pos, playlist_count,
                     zoom_locked, zoom_preset_name,
                     telemetry=last_telemetry,
-                    show_advanced_telemetry=show_telemetry_panel,
+                    show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
                 )
                 status_row = layout.get("status_row")
                 status_width = layout.get("width")
@@ -1061,11 +1127,23 @@ def run() -> int:
                         log.info("playlist: skipped to next video")
                         print("\n  Next video.")
                         time.sleep(0.2)
+                    elif _ep_has_next:
+                        ipc.quit()
+                        _hianime_skip_to_next = True
+                        log.info("hianime: manual skip to next episode")
+                        print("\n  Loading next episode...")
+                        time.sleep(0.2)
                 elif ch in (b"p", b"P"):
                     if is_playlist:
                         ipc.playlist_prev()
                         log.info("playlist: skipped to previous video")
                         print("\n  Previous video.")
+                        time.sleep(0.2)
+                    elif _ep_has_prev:
+                        ipc.quit()
+                        _hianime_skip_to_prev = True
+                        log.info("hianime: manual skip to previous episode")
+                        print("\n  Loading previous episode...")
                         time.sleep(0.2)
                 elif ch in (b"a", b"A"):
                     if _transition_watch_active:
@@ -1099,7 +1177,7 @@ def run() -> int:
                     time.sleep(0.8)
                     layout = show_now_playing(
                         title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
-                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
                     )
                     status_row = layout.get("status_row")
                     status_width = layout.get("width")
@@ -1112,7 +1190,7 @@ def run() -> int:
                         time.sleep(2)
                     layout = show_now_playing(
                         title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
-                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
                     )
                     status_row = layout.get("status_row")
                     status_width = layout.get("width")
@@ -1125,7 +1203,7 @@ def run() -> int:
                         time.sleep(2)
                     layout = show_now_playing(
                         title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
-                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
                     )
                     status_row = layout.get("status_row")
                     status_width = layout.get("width")
@@ -1152,7 +1230,7 @@ def run() -> int:
                         time.sleep(0.8)
                     layout = show_now_playing(
                         title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
-                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
                     )
                     status_row = layout.get("status_row")
                     status_width = layout.get("width")
@@ -1184,7 +1262,7 @@ def run() -> int:
                         time.sleep(0.8)
                     layout = show_now_playing(
                         title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
-                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
                     )
                     status_row = layout.get("status_row")
                     status_width = layout.get("width")
@@ -1197,7 +1275,7 @@ def run() -> int:
                     time.sleep(0.5)
                     layout = show_now_playing(
                         title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
-                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
                     )
                     status_row = layout.get("status_row")
                     status_width = layout.get("width")
@@ -1219,7 +1297,7 @@ def run() -> int:
                     _last_rect_watch_at = 0.0
                     layout = show_now_playing(
                         title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
-                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
                     )
                     status_row = layout.get("status_row")
                     status_width = layout.get("width")
@@ -1241,7 +1319,7 @@ def run() -> int:
                     _last_rect_watch_at = 0.0
                     layout = show_now_playing(
                         title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
-                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
                     )
                     status_row = layout.get("status_row")
                     status_width = layout.get("width")
@@ -1254,7 +1332,7 @@ def run() -> int:
                     time.sleep(0.2)
                     layout = show_now_playing(
                         title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
-                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
                     )
                     status_row = layout.get("status_row")
                     status_width = layout.get("width")
@@ -1313,6 +1391,26 @@ def run() -> int:
                 proc.kill()
 
     log.info("=== session end")
+
+    # HiAnime episode navigation: manual N/P skip OR natural EOF autoplay.
+    _launch_script = os.path.join(_PROJECT_ROOT, "launch_youtube.py")
+    if not _quit_flag:
+        if _hianime_skip_to_next and _ep_has_next and _ep_next_url:
+            # User pressed N — launch next episode immediately, no countdown.
+            log.info("autoplay: manual next -> %s", _ep_next_url)
+            subprocess.run([sys.executable, _launch_script, "--url", _ep_next_url])
+        elif _hianime_skip_to_prev and _ep_has_prev and _ep_prev_url:
+            # User pressed P — launch previous episode immediately, no countdown.
+            log.info("autoplay: manual prev -> %s", _ep_prev_url)
+            subprocess.run([sys.executable, _launch_script, "--url", _ep_prev_url])
+        elif _ep_has_next and _ep_next_url and rc == 0 and _mpv_exited_at_eof(_mpv_log_path):
+            # Natural EOF — show countdown before advancing.
+            log.info("autoplay: eof eligible — next=%s", _ep_next_url)
+            _play_next = _autoplay_countdown(_ep_next_url, _ep_next_title)
+            if _play_next:
+                log.info("autoplay: eof launching %s", _play_next)
+                subprocess.run([sys.executable, _launch_script, "--url", _play_next])
+
     print("[youtube] Done.")
     return 0
 

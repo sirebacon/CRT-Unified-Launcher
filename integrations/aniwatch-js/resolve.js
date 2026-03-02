@@ -8,12 +8,16 @@
  *   https://hianime.to/watch/{show-slug}?ep={episode-id}
  *
  * Output (stdout): JSON with keys:
- *   target_url    (string)  — resolved HLS or MP4 URL for mpv
- *   is_playlist   (bool)    — always false (single episode)
- *   subtitle_urls (array)   — VTT subtitle URLs
- *   extra_headers (object)  — HTTP headers mpv needs (e.g. Referer)
- *   episode_title (string)  — episode title if available
- *   server_used   (string)  — CDN server name selected
+ *   target_url         (string)  — resolved HLS or MP4 URL for mpv
+ *   is_playlist        (bool)    — always false (single episode)
+ *   subtitle_urls      (array)   — VTT subtitle URLs
+ *   extra_headers      (object)  — HTTP headers mpv needs (e.g. Referer)
+ *   episode_title      (string)  — episode title if available
+ *   server_used        (string)  — CDN server name selected
+ *   has_next           (bool)    — true when a next episode exists in the series
+ *   next_episode_url   (string|null) — full hianime.to URL for the next episode
+ *   next_episode_title (string)  — title of the next episode (empty if unknown)
+ *   playlist_items     (array)   — [{url, title, number}] from next episode onward
  *
  * Exits non-zero on any error and writes the reason to stderr.
  */
@@ -68,15 +72,22 @@ async function resolve(url) {
     const serverName =
         SERVER_PREFERENCE.find((s) => subServers.includes(s)) || subServers[0];
 
-    // --- Get sources ---
-    let sourcesData;
-    try {
-        sourcesData = await scraper.getEpisodeSources(episodeId, serverName, "sub");
-    } catch (err) {
+    // --- Get sources and episode list concurrently ---
+    // Sources are required; episode list is best-effort (for autoplay).
+    const [sourcesResult, episodesResult] = await Promise.allSettled([
+        scraper.getEpisodeSources(episodeId, serverName, "sub"),
+        scraper.getEpisodes(showSlug),
+    ]);
+
+    if (sourcesResult.status === "rejected") {
         throw new Error(
-            `Failed to fetch sources from server "${serverName}": ${err.message}`
+            `Failed to fetch sources from server "${serverName}": ${sourcesResult.reason.message}`
         );
     }
+
+    const sourcesData = sourcesResult.value;
+    const episodesData =
+        episodesResult.status === "fulfilled" ? episodesResult.value : null;
 
     const sources = sourcesData.sources || [];
     if (sources.length === 0) {
@@ -106,13 +117,63 @@ async function resolve(url) {
         extraHeaders["Referer"] = sourcesData.headers.Referer;
     }
 
+    // --- Episode list for autoplay + episode title ---
+    let hasNext = false;
+    let nextEpisodeUrl = null;
+    let nextEpisodeTitle = "";
+    let hasPrev = false;
+    let prevEpisodeUrl = null;
+    let prevEpisodeTitle = "";
+    let playlistItems = [];
+
+    // Fall back to episode list for the title if the source didn't provide one.
+    let episodeTitle = sourcesData.episodeTitle || "";
+
+    if (episodesData && Array.isArray(episodesData.episodes)) {
+        const episodes = episodesData.episodes;
+        const currentIndex = episodes.findIndex((ep) => ep.episodeId === episodeId);
+        if (currentIndex !== -1) {
+            // Use episode list title if sources gave us nothing.
+            if (!episodeTitle) {
+                episodeTitle = episodes[currentIndex].title || "";
+            }
+            // Next episodes
+            if (currentIndex + 1 < episodes.length) {
+                playlistItems = episodes.slice(currentIndex + 1).map((ep) => ({
+                    url: `https://hianime.to/watch/${ep.episodeId}`,
+                    title: ep.title || `Episode ${ep.number}`,
+                    number: ep.number,
+                }));
+                hasNext = playlistItems.length > 0;
+                if (hasNext) {
+                    nextEpisodeUrl = playlistItems[0].url;
+                    nextEpisodeTitle = playlistItems[0].title;
+                }
+            }
+            // Previous episode
+            if (currentIndex > 0) {
+                const prevEp = episodes[currentIndex - 1];
+                hasPrev = true;
+                prevEpisodeUrl = `https://hianime.to/watch/${prevEp.episodeId}`;
+                prevEpisodeTitle = prevEp.title || `Episode ${prevEp.number}`;
+            }
+        }
+    }
+
     const result = {
         target_url: targetUrl,
         is_playlist: false,
         subtitle_urls: subtitleUrls,
         extra_headers: extraHeaders,
-        episode_title: sourcesData.episodeTitle || "",
+        episode_title: episodeTitle,
         server_used: serverName,
+        has_next: hasNext,
+        next_episode_url: nextEpisodeUrl,
+        next_episode_title: nextEpisodeTitle,
+        has_prev: hasPrev,
+        prev_episode_url: prevEpisodeUrl,
+        prev_episode_title: prevEpisodeTitle,
+        playlist_items: playlistItems,
     };
 
     process.stdout.write(JSON.stringify(result) + "\n");

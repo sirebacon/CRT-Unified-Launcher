@@ -46,6 +46,7 @@ class AniwatchProvider(Provider):
         self._node_path = node_path
         self._resolver_path = resolver_path
         self._timeout = timeout
+        self._cache: dict = {}  # url -> resolver result; avoids double-fetching per session
 
     def name(self) -> str:
         return "HiAnime"
@@ -88,6 +89,12 @@ class AniwatchProvider(Provider):
             "extra_headers": data.get("extra_headers", {}),
             "playlist_items": data.get("playlist_items", []),
             "current_index": data.get("current_index", 0),
+            "has_next": data.get("has_next", False),
+            "next_episode_url": data.get("next_episode_url"),
+            "next_episode_title": data.get("next_episode_title", ""),
+            "has_prev": data.get("has_prev", False),
+            "prev_episode_url": data.get("prev_episode_url"),
+            "prev_episode_title": data.get("prev_episode_title", ""),
         }
 
     def fetch_title(self, url: str) -> str:
@@ -120,6 +127,10 @@ class AniwatchProvider(Provider):
             return False
 
     def _run_resolver(self, url: str) -> dict:
+        if url in self._cache:
+            log.debug("resolver cache hit: %s", url)
+            return self._cache[url]
+
         if not os.path.exists(self._resolver_path):
             raise RuntimeError(f"Resolver script not found: {self._resolver_path}")
 
@@ -159,6 +170,9 @@ class AniwatchProvider(Provider):
             raise RuntimeError("HiAnime resolver returned no JSON output")
 
         try:
-            return json.loads(json_line)
+            data = json.loads(json_line)
         except json.JSONDecodeError as e:
             raise RuntimeError(f"HiAnime resolver returned invalid JSON: {e}")
+
+        self._cache[url] = data
+        return data
