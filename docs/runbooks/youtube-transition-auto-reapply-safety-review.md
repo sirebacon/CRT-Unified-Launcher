@@ -194,3 +194,32 @@ Before enabling broadly, run this matrix and capture logs:
 5. Last-item/near-end behavior:
    - test final playlist transitions.
    - verify watch end summary is emitted even near session stop.
+
+## Implemented Guard Timing Logic (Current)
+
+This is the currently implemented timing strategy to catch late mpv drift that can occur after transition watch reports `settled`.
+
+### Config + Defaults
+- `youtube_rect_guard_interval_sec`: tuned from `15.0` to `5.0`
+- Launcher fallback default when key is absent: `5.0`
+- Minimum clamp: `2.0` (previously `5.0`)
+
+### Transition-to-Guard Handoff
+When transition watch ends (both paths):
+1. `stable_hits` success path (`transition-watch-end ... reason=stable_hits`)
+2. timeout/finalization path (`transition-watch-end ... reason=...`)
+
+The launcher resets:
+- `_last_rect_guard_at = 0.0`
+
+This forces an immediate rect-guard check on the next loop tick, instead of waiting a full guard interval.
+
+### Why This Matters
+Previous behavior could miss drift in the gap between:
+- transition watch completion
+- next periodic guard (previously up to 15s later)
+
+With the current logic:
+- first guard runs immediately after watch completion
+- subsequent guards run every 5s
+- late resize drift is caught much sooner without requiring manual `R` snap.
