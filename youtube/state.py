@@ -14,11 +14,18 @@ _SESSION_PATH   = os.path.join(_RUNTIME, "youtube_session.json")
 _FAVORITES_PATH = os.path.join(_RUNTIME, "youtube_favorites.json")
 _HISTORY_PATH   = os.path.join(_RUNTIME, "youtube_history.json")
 _BOOKMARKS_PATH = os.path.join(_RUNTIME, "youtube_bookmarks.json")
+_UI_PREFS_PATH  = os.path.join(_RUNTIME, "youtube_ui_prefs.json")
 
 _PROFILES_DIR       = os.path.join(_PROJECT_ROOT, "profiles")
 _ZOOM_PRESETS_PATH  = os.path.join(_PROFILES_DIR, "youtube_zoom_presets.json")
 
 _HISTORY_MAX = 200
+
+_DEFAULT_UI_PREFS = {
+    "show_telemetry_panel": False,
+    "telemetry_level": "basic",
+    "compact_mode": False,
+}
 
 # ---- Internal helpers ----
 
@@ -96,6 +103,28 @@ def clear_session() -> None:
         os.remove(_SESSION_PATH)
     except FileNotFoundError:
         pass
+
+
+# ---- UI preferences ----
+
+def load_ui_prefs() -> dict:
+    prefs = _read_json(_UI_PREFS_PATH, {})
+    if not isinstance(prefs, dict):
+        return dict(_DEFAULT_UI_PREFS)
+    out = dict(_DEFAULT_UI_PREFS)
+    out.update({k: prefs.get(k, v) for k, v in _DEFAULT_UI_PREFS.items()})
+    out["show_telemetry_panel"] = bool(out.get("show_telemetry_panel", False))
+    out["compact_mode"] = bool(out.get("compact_mode", False))
+    level = str(out.get("telemetry_level", "basic")).strip().lower()
+    out["telemetry_level"] = level if level in {"basic", "advanced"} else "basic"
+    return out
+
+
+def save_ui_prefs(prefs: dict) -> None:
+    out = dict(_DEFAULT_UI_PREFS)
+    if isinstance(prefs, dict):
+        out.update({k: prefs.get(k, v) for k, v in _DEFAULT_UI_PREFS.items()})
+    _write_json(_UI_PREFS_PATH, out)
 
 
 # ---- Favorites ----

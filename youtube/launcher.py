@@ -27,10 +27,13 @@ from youtube.config import (
 )
 from youtube.player import wait_for_window
 from youtube.controls import (
+    build_now_playing_status_text,
+    clear_compact_status_line,
     show_adjust_mode,
     show_adjust_status,
     show_compact_status,
     show_now_playing,
+    update_now_playing_status_line,
 )
 from youtube.adjust import handle_adjust_key, _STEPS
 from youtube.state import (
@@ -40,11 +43,14 @@ from youtube.state import (
     get_bookmarks,
     load_favorites,
     load_history,
+    load_ui_prefs,
     load_session,
     load_zoom_presets,
+    save_ui_prefs,
     save_session,
 )
 from youtube.queue import build_temp_playlist, load_queue_file, load_saved_queue, save_queue
+from youtube.telemetry import TelemetryEngine
 
 
 def _setup_log() -> logging.Logger:
@@ -65,6 +71,9 @@ def _setup_log() -> logging.Logger:
 log = _setup_log()
 
 _HIDE_AFTER = 5.0  # seconds before auto-hiding controls
+_VISIBLE_REDRAW_SEC = 1.0
+_HIDDEN_STATUS_REDRAW_SEC = 0.25
+_SHOW_COMPACT_WHEN_HIDDEN = False
 
 
 def _fmt_time(seconds: float) -> str:
@@ -197,6 +206,8 @@ def run() -> int:
     audio_device_token = cfg.get("youtube_audio_device", "").strip()
     quality_presets = cfg.get("youtube_quality_presets", {})
     use_duplex_ipc = bool(cfg.get("youtube_ipc_duplex", False))
+    ui_prefs = load_ui_prefs()
+    show_telemetry_panel = bool(ui_prefs.get("show_telemetry_panel", False))
     # Determine URL / queue
     url: Optional[str] = args.url
     is_queue = False
@@ -370,6 +381,15 @@ def run() -> int:
                 move_window(hwnd, x, y, w, h, strip_caption=True)
                 log.info("mpv window re-positioned after IPC connect")
 
+        telemetry = TelemetryEngine(ipc, is_playlist=is_playlist)
+        telemetry.set_ipc_mode(ipc.mode if ipc_connected else "offline")
+        last_telemetry = telemetry.tick(
+            time.monotonic(),
+            show_advanced=show_telemetry_panel,
+            zoom_locked=False,
+            zoom_preset_name=None,
+        )
+
         if url:
             add_to_history(url, title)
 
@@ -387,11 +407,23 @@ def run() -> int:
         _last_keypress: float = time.monotonic()
         controls_hidden: bool = False
         _quit_flag = False
+        _last_visible_redraw: float = time.monotonic()
+        _last_hidden_status_redraw: float = 0.0
 
         zoom_locked: bool = False
         zoom_preset_name: Optional[str] = None
 
-        show_now_playing(title, is_playlist, zoom_locked=zoom_locked, zoom_preset_name=zoom_preset_name)
+        layout = show_now_playing(
+            title,
+            is_playlist,
+            zoom_locked=zoom_locked,
+            zoom_preset_name=zoom_preset_name,
+            telemetry=last_telemetry,
+            show_advanced_telemetry=show_telemetry_panel,
+        )
+        status_row = layout.get("status_row")
+        status_width = layout.get("width")
+        last_status_text = layout.get("status_text")
 
         # Drain any keystrokes that accumulated in the console input buffer
         # during the loading phase (title fetch, mpv launch, IPC connect).
@@ -403,6 +435,14 @@ def run() -> int:
         # --- Main loop ---
         while proc.poll() is None and not _quit_flag:
             now = time.monotonic()
+            prev_snapshot = last_telemetry
+            last_telemetry = telemetry.tick(
+                now,
+                show_advanced=show_telemetry_panel,
+                zoom_locked=zoom_locked,
+                zoom_preset_name=zoom_preset_name,
+            )
+            telemetry_changed = last_telemetry != prev_snapshot
 
             # Title + playlist position poll (every 2s)
             if hwnd is not None and now >= _title_check_at:
@@ -441,16 +481,66 @@ def run() -> int:
                                 )
                                 break
                     if not adjust_mode and not controls_hidden:
-                        show_now_playing(
+                        layout = show_now_playing(
                             title, is_playlist, playlist_pos, playlist_count,
                             zoom_locked, zoom_preset_name,
+                            telemetry=last_telemetry,
+                            show_advanced_telemetry=show_telemetry_panel,
                         )
+                        status_row = layout.get("status_row")
+                        status_width = layout.get("width")
+                        last_status_text = layout.get("status_text")
 
             # Auto-hide after inactivity
             if not adjust_mode and not controls_hidden:
                 if now - _last_keypress > _HIDE_AFTER:
                     controls_hidden = True
-                    show_compact_status(title, playlist_pos, playlist_count)
+                    if _SHOW_COMPACT_WHEN_HIDDEN:
+                        show_compact_status(title, playlist_pos, playlist_count, telemetry=last_telemetry)
+                        _last_hidden_status_redraw = now
+                    else:
+                        clear_compact_status_line()
+                elif telemetry_changed:
+                    new_status_text = build_now_playing_status_text(last_telemetry, zoom_preset_name)
+                    line_updated = False
+                    if (
+                        not show_telemetry_panel
+                        and status_row is not None
+                        and status_width is not None
+                        and new_status_text != last_status_text
+                    ):
+                        line_updated = update_now_playing_status_line(
+                            new_status_text,
+                            status_row,
+                            status_width,
+                        )
+                        if line_updated:
+                            last_status_text = new_status_text
+
+                    if (
+                        (not line_updated and (now - _last_visible_redraw) >= _VISIBLE_REDRAW_SEC)
+                        or (show_telemetry_panel and (now - _last_visible_redraw) >= _VISIBLE_REDRAW_SEC)
+                    ):
+                        layout = show_now_playing(
+                            title, is_playlist, playlist_pos, playlist_count,
+                            zoom_locked, zoom_preset_name,
+                            telemetry=last_telemetry,
+                            show_advanced_telemetry=show_telemetry_panel,
+                        )
+                        status_row = layout.get("status_row")
+                        status_width = layout.get("width")
+                        last_status_text = layout.get("status_text")
+                        _last_visible_redraw = now
+            elif not adjust_mode and controls_hidden:
+                # Keep the compact line alive while hidden.
+                if telemetry_changed and status_row is not None and status_width is not None:
+                    new_status_text = build_now_playing_status_text(last_telemetry, zoom_preset_name)
+                    if new_status_text != last_status_text:
+                        if update_now_playing_status_line(new_status_text, status_row, status_width):
+                            last_status_text = new_status_text
+                if _SHOW_COMPACT_WHEN_HIDDEN and (now - _last_hidden_status_redraw) >= _HIDDEN_STATUS_REDRAW_SEC:
+                    show_compact_status(title, playlist_pos, playlist_count, telemetry=last_telemetry)
+                    _last_hidden_status_redraw = now
 
             if not msvcrt.kbhit():
                 time.sleep(0.05)
@@ -461,7 +551,17 @@ def run() -> int:
             # Restore controls if hidden — don't consume the key, process it normally
             if controls_hidden and not adjust_mode:
                 controls_hidden = False
-                show_now_playing(title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name)
+                clear_compact_status_line()
+                layout = show_now_playing(
+                    title, is_playlist, playlist_pos, playlist_count,
+                    zoom_locked, zoom_preset_name,
+                    telemetry=last_telemetry,
+                    show_advanced_telemetry=show_telemetry_panel,
+                )
+                status_row = layout.get("status_row")
+                status_width = layout.get("width")
+                last_status_text = layout.get("status_text")
+                _last_visible_redraw = now
 
             ch = msvcrt.getch()
 
@@ -486,24 +586,40 @@ def run() -> int:
                     ch2 = msvcrt.getch()
                     if ch2 == b"K":
                         ipc.seek(-10)
+                        print("\n  Seek -10s.")
+                        time.sleep(0.15)
                     elif ch2 == b"M":
                         ipc.seek(10)
+                        print("\n  Seek +10s.")
+                        time.sleep(0.15)
                     elif ch2 == b"H":
                         ipc.add_volume(5)
+                        print("\n  Volume +5.")
+                        time.sleep(0.15)
                     elif ch2 == b"P":
                         ipc.add_volume(-5)
+                        print("\n  Volume -5.")
+                        time.sleep(0.15)
                 elif ch == b" ":
                     ipc.toggle_pause()
+                    print("\n  Toggled pause.")
+                    time.sleep(0.2)
                 elif ch in (b"m", b"M"):
                     ipc.toggle_mute()
+                    print("\n  Toggled mute.")
+                    time.sleep(0.2)
                 elif ch in (b"n", b"N"):
                     if is_playlist:
                         ipc.playlist_next()
                         log.info("playlist: skipped to next video")
+                        print("\n  Next video.")
+                        time.sleep(0.2)
                 elif ch in (b"p", b"P"):
                     if is_playlist:
                         ipc.playlist_prev()
                         log.info("playlist: skipped to previous video")
+                        print("\n  Previous video.")
+                        time.sleep(0.2)
                 elif ch in (b"a", b"A"):
                     adjust_mode = True
                     if hwnd is not None:
@@ -518,21 +634,39 @@ def run() -> int:
                     else:
                         print("\n  No URL to save (queue mode).")
                     time.sleep(0.8)
-                    show_now_playing(title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name)
+                    layout = show_now_playing(
+                        title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                    )
+                    status_row = layout.get("status_row")
+                    status_width = layout.get("width")
+                    last_status_text = layout.get("status_text")
                 elif ch in (b"l", b"L"):
                     picked = _run_favorites_menu()
                     if picked:
                         print(f"  URL: {picked}")
                         print("  (Restart launch_youtube.py with this URL to play.)")
                         time.sleep(2)
-                    show_now_playing(title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name)
+                    layout = show_now_playing(
+                        title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                    )
+                    status_row = layout.get("status_row")
+                    status_width = layout.get("width")
+                    last_status_text = layout.get("status_text")
                 elif ch in (b"h", b"H"):
                     picked = _run_history_menu()
                     if picked:
                         print(f"  URL: {picked}")
                         print("  (Restart launch_youtube.py with this URL to play.)")
                         time.sleep(2)
-                    show_now_playing(title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name)
+                    layout = show_now_playing(
+                        title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                    )
+                    status_row = layout.get("status_row")
+                    status_width = layout.get("width")
+                    last_status_text = layout.get("status_text")
                 elif ch in (b"b", b"B"):
                     if ipc_connected:
                         t = ipc.get_property("time-pos")
@@ -553,7 +687,13 @@ def run() -> int:
                     else:
                         print("\n  IPC not connected.")
                         time.sleep(0.8)
-                    show_now_playing(title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name)
+                    layout = show_now_playing(
+                        title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                    )
+                    status_row = layout.get("status_row")
+                    status_width = layout.get("width")
+                    last_status_text = layout.get("status_text")
                 elif ch in (b"j", b"J"):
                     if ipc_connected:
                         marks = get_bookmarks(url or "")
@@ -579,14 +719,39 @@ def run() -> int:
                     else:
                         print("\n  IPC not connected.")
                         time.sleep(0.8)
-                    show_now_playing(title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name)
+                    layout = show_now_playing(
+                        title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                    )
+                    status_row = layout.get("status_row")
+                    status_width = layout.get("width")
+                    last_status_text = layout.get("status_text")
                 elif ch in (b"z", b"Z"):
                     zoom_locked, zoom_preset_name, status = _cycle_zoom_preset(
                         zoom_locked, zoom_preset_name, ipc_connected, ipc
                     )
                     print(f"\n  {status}")
                     time.sleep(0.5)
-                    show_now_playing(title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name)
+                    layout = show_now_playing(
+                        title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                    )
+                    status_row = layout.get("status_row")
+                    status_width = layout.get("width")
+                    last_status_text = layout.get("status_text")
+                elif ch in (b"t", b"T"):
+                    show_telemetry_panel = not show_telemetry_panel
+                    ui_prefs["show_telemetry_panel"] = show_telemetry_panel
+                    save_ui_prefs(ui_prefs)
+                    print(f"\n  Telemetry {'ON' if show_telemetry_panel else 'OFF'}.")
+                    time.sleep(0.2)
+                    layout = show_now_playing(
+                        title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel,
+                    )
+                    status_row = layout.get("status_row")
+                    status_width = layout.get("width")
+                    last_status_text = layout.get("status_text")
                 elif ch in (b"q", b"Q", b"\x1b"):
                     ipc.quit()
                     _quit_flag = True
