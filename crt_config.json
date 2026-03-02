@@ -2,6 +2,8 @@
   "mpv_path": "D:\\Emulators\\mpv\\mpv.exe",
   "yt_dlp_path": "D:\\Emulators\\yt-dlp\\yt-dlp_x86.exe",
   "youtube_ipc_duplex": true,
+  "youtube_rect_guard_enabled": true,
+  "youtube_rect_guard_interval_sec": 5.0,
   "youtube_audio_device": "",
   "youtube_quality_presets": {
     "best":  {},

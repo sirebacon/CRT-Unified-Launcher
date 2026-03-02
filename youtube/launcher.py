@@ -401,6 +401,8 @@ def run() -> int:
         1, int(cfg.get("youtube_transition_required_stable_hits", 2))
     )
     force_final_snap_on_watch_fail = bool(cfg.get("force_final_snap_on_watch_fail", False))
+    rect_guard_enabled = bool(cfg.get("youtube_rect_guard_enabled", True))
+    rect_guard_interval_sec = max(2.0, float(cfg.get("youtube_rect_guard_interval_sec", 5.0)))
     ui_prefs = load_ui_prefs()
     show_telemetry_panel = bool(ui_prefs.get("show_telemetry_panel", False))
     # Determine URL / queue
@@ -612,6 +614,7 @@ def run() -> int:
         _transition_watch_last_correct_at: float = 0.0
         _transition_watch_budget_exhausted: bool = False
         _last_rect_watch_at: float = 0.0
+        _last_rect_guard_at: float = 0.0
 
         zoom_locked: bool = False
         zoom_preset_name: Optional[str] = None
@@ -750,7 +753,22 @@ def run() -> int:
                     _rect_to_text(final),
                     reason,
                 )
+                # Final zoom re-assert: mpv can reset video-zoom during codec
+                # initialisation which may finish after the watch window opened.
+                if zoom_locked and zoom_preset_name and ipc_connected:
+                    for p in load_zoom_presets():
+                        if p.get("name") == zoom_preset_name:
+                            ipc.set_property("video-zoom",  p.get("zoom",  0.0))
+                            ipc.set_property("video-pan-x", p.get("pan_x", 0.0))
+                            ipc.set_property("video-pan-y", p.get("pan_y", 0.0))
+                            log.info(
+                                "transition-watch-end: zoom re-asserted preset=%s",
+                                zoom_preset_name,
+                            )
+                            break
                 _transition_watch_active = False
+                # Force rect-guard to run immediately after watch ends.
+                _last_rect_guard_at = 0.0
 
             if (
                 _transition_watch_active
@@ -786,6 +804,9 @@ def run() -> int:
                                 _rect_to_text(current),
                             )
                             _transition_watch_active = False
+                            # Force the rect-guard to run immediately after the
+                            # transition settles — mpv can still drift post-codec-init.
+                            _last_rect_guard_at = 0.0
                     else:
                         _transition_watch_stable_hits = 0
                         log.warning(
@@ -819,6 +840,50 @@ def run() -> int:
                                 _transition_watch_attempts,
                                 _rect_to_text(target),
                             )
+
+            # Continuous low-frequency rect + zoom guard.
+            # Catches late post-transition drift that occurs after mpv finishes
+            # codec initialisation (which can happen well after the title change
+            # that triggered the transition watch).
+            if (
+                rect_guard_enabled
+                and not adjust_mode
+                and not _transition_watch_active
+                and hwnd is not None
+                and (now - _last_rect_guard_at) >= rect_guard_interval_sec
+            ):
+                _last_rect_guard_at = now
+                target = (x, y, w, h)
+                current = None
+                try:
+                    current = get_rect(hwnd)
+                except Exception:
+                    pass
+                if current is not None and not _rect_matches(current, target):
+                    log.warning(
+                        "rect-guard: drift detected target=(%s) current=(%s); correcting",
+                        _rect_to_text(target),
+                        _rect_to_text(current),
+                    )
+                    move_window(hwnd, x, y, w, h, strip_caption=True)
+                    # Rect drifted → mpv likely did a post-load reinit; re-apply zoom too.
+                    if zoom_locked and zoom_preset_name and ipc_connected:
+                        for p in load_zoom_presets():
+                            if p.get("name") == zoom_preset_name:
+                                ipc.set_property("video-zoom",  p.get("zoom",  0.0))
+                                ipc.set_property("video-pan-x", p.get("pan_x", 0.0))
+                                ipc.set_property("video-pan-y", p.get("pan_y", 0.0))
+                                log.info(
+                                    "rect-guard: zoom re-applied preset=%s",
+                                    zoom_preset_name,
+                                )
+                                break
+                else:
+                    log.debug(
+                        "rect-guard: ok target=(%s) current=(%s)",
+                        _rect_to_text(target),
+                        _rect_to_text(current),
+                    )
 
             # Auto-hide after inactivity
             if not adjust_mode and not controls_hidden:
