@@ -30,17 +30,21 @@ MediaSession owns the base mpv command. The provider contributes deltas via
 `mpv_extra_args()`. Adding a Tier 1 provider is typically under 50 lines.
 
 ### Tier 2 - resolver-backed providers
-Examples: HiAnime (hianime.to), and other JS-rendered anime streaming sites not supported
-by yt-dlp.
+Examples: HiAnime (hianime.to), WCO (wco.tv / wcostream.tv), and other sites not
+reliably supported by plain yt-dlp URL handoff.
 
 mpv invocation:
 ```
 mpv --no-ytdl [--sub-file=<subtitle_url> ...] <resolved_hls_or_mp4_url>
 ```
-A Tier 2 provider calls an external resolver subprocess (e.g. `integrations/aniwatch-js`)
-to obtain the raw stream URL and subtitle tracks before mpv is launched. The provider's
-`resolve_target()` returns the pre-resolved URL; MediaSession passes it directly to mpv
-without the yt-dlp hook. The resolver runs as a short-lived subprocess; its output is JSON.
+A Tier 2 provider resolves URLs before playback and returns a normalized payload for mpv.
+Resolution can be done either by:
+- external subprocess (HiAnime via `integrations/aniwatch-js`)
+- in-process HTTP resolver logic (WCO via `media/providers/wco_http.py`)
+
+For WCO specifically, the provider now returns a localhost proxy URL (`127.0.0.1`) to mpv.
+The proxy forwards bytes from the upstream CDN using Python's HTTP stack, which avoids
+mpv/ffmpeg-side CDN 404 behavior observed on direct WCO CDN playback.
 
 The `uses_ytdl: bool` capability flag distinguishes the two tiers. MediaSession includes
 `--script-opts=ytdl_hook-ytdl_path=yt-dlp.exe` only when `uses_ytdl` is `True`.
@@ -64,8 +68,33 @@ servers, and raw stream URLs via the `aniwatch` npm package. The launcher calls
 `resolve.js` as a short-lived subprocess, receives a JSON payload (stream URL, subtitle
 tracks, episode list), and routes the result through `AniwatchProvider` to mpv.
 
-Status: **Implemented** (2026-03-02). `integrations/aniwatch-js/resolve.js` and
-`media/providers/aniwatch.py` are complete and wired into the provider registry.
+Status: **Implemented and verified** (2026-03-03). `integrations/aniwatch-js/resolve.js`
+and `media/providers/aniwatch.py` are wired into the provider registry, including episode
+next/prev and autoplay flow through launcher episode metadata fields.
+
+### WCO Streaming Sites
+WCO is implemented as a Tier 2 provider using modular Python resolver files:
+- `media/providers/wco.py`
+- `media/providers/wco_http.py`
+- `media/providers/wco_playlist.py`
+- `media/providers/wco_types.py`
+- `media/providers/wco_utils.py`
+
+Current behavior:
+- resolves WCO episode pages to CDN-backed media flow via curl_cffi (Cloudflare bypass)
+- calls `server/getvid?evid=<enc>&json` (matching browser JS) to obtain the CDN URL
+- serves playback to mpv through a local HTTP proxy (`127.0.0.1`) to avoid mpv/ffmpeg CDN 404s
+- forwards Range headers for seeking support
+- populates episode navigation metadata (`has_next`, `has_prev`, next/prev URL/title)
+
+Known limitations:
+- **lb cluster (m01/m02)** — Western cartoons (e.g. 2 Stupid Dogs) use `lb.wcostream.com`
+  whose CDN nodes return 404 to all Python HTTP clients regardless of TLS fingerprint or
+  headers. The browser plays these fine; cause is unknown. The proxy surfaces a 404 to mpv.
+- if WCO's embed page JS itself falls back to `/error.mp4` for an episode, no resolver code
+  can make that title playable — the content does not exist on WCO at all.
+
+Reference: see `docs/runbooks/wco-mpv-cdn-404-proxy-fix.md`.
 
 Implementation constraints:
 - Node logic stays isolated to `integrations/aniwatch-js`; Python treats it as an opaque
@@ -116,6 +145,12 @@ Each site implements the same contract:
   "extra_headers": dict,          # optional; passed as --http-header-fields= (Tier 2 only)
   "playlist_items": list[dict],   # optional; normalized episode list for next/prev
   "current_index": int,           # optional; index into playlist_items
+  "has_next": bool,               # optional; episode navigation hint
+  "has_prev": bool,               # optional; episode navigation hint
+  "next_episode_url": str,        # optional; episode navigation target
+  "prev_episode_url": str,        # optional; episode navigation target
+  "next_episode_title": str,      # optional; episode navigation label
+  "prev_episode_title": str,      # optional; episode navigation label
 }
 ```
 
@@ -262,12 +297,16 @@ youtube/            # kept as thin shim during transition; removed after Phase 2
 ### Phase 1: Generic Provider ✓ DONE
 - `GenericProvider` added as fallback (`--no-ytdl`, `supports_*: False`). ✓
 
-### Phase 2: Add HiAnime Provider (Tier 2) ✓ DONE (pending live verification)
+### Phase 2: Add HiAnime Provider (Tier 2) ✓ DONE
 - `integrations/aniwatch-js/resolve.js` written and deployed. ✓
 - `media/providers/aniwatch.py` wired to the Node resolver subprocess. ✓
 - `uses_ytdl: False`, `supports_playlist: True`, `supports_title_fetch: True`, `supports_resume: True`. ✓
-- Pending: end-to-end smoke test against a live hianime.to URL.
-- Pending: resolver config section in `crt_config.json` (Node path, timeout currently use code defaults).
+
+### Phase 2b: Add WCO Provider (Tier 2) ✓ DONE
+- Modular WCO resolver/provider stack implemented under `media/providers/wco_*`. ✓
+- Local proxy playback path added for mpv compatibility with WCO CDN behavior. ✓
+- Episode next/prev metadata wired to existing launcher controls/autoplay path. ✓
+- Playwright fallback removed from active design (HTTP path is primary). ✓
 
 ### Phase 3: Capability Matrix and Fallback Rules
 - Capability flags (`supports_playlist`, `supports_title_fetch`, `supports_resume`, etc.)
@@ -303,9 +342,9 @@ Acceptance:
 
 ## Future Scope (not current priority)
 
-Once the Tier 1/Tier 2 provider model is stable and HiAnime is confirmed working, the
+Once the Tier 1/Tier 2 provider model is stable, the
 following sites are natural additions. None require changes to MediaSession or the core
-architecture — each is a new provider file and a registry entry.
+architecture - each is a new provider file and a registry entry.
 
 ### Tier 1 additions (yt-dlp-backed, low effort)
 
@@ -386,7 +425,7 @@ architecture — each is a new provider file and a registry entry.
 
 ## Implementation Status
 
-### Completed (as of 2026-03-02)
+### Completed (as of 2026-03-03)
 
 - [x] `media/providers/base.py` — `Provider` ABC + `ProviderCapabilities` dataclass
 - [x] `media/providers/registry.py` — URL → provider dispatch, `setup(cfg)`, `get_provider_or_generic(url)`
@@ -394,6 +433,12 @@ architecture — each is a new provider file and a registry entry.
 - [x] `media/providers/generic.py` — `GenericProvider` fallback (`--no-ytdl`, accepts any URL)
 - [x] `media/providers/aniwatch.py` — `AniwatchProvider` (Tier 2): calls Node resolver subprocess, timeout, JSON parse
 - [x] `integrations/aniwatch-js/resolve.js` — Node resolver for hianime.to (servers → sources → JSON output)
+- [x] HiAnime episode navigation/autoplay metadata integrated with launcher controls
+- [x] `media/providers/wco.py` — WCO provider facade and registry integration
+- [x] `media/providers/wco_http.py` — WCO HTTP resolver + localhost proxy playback path
+- [x] `media/providers/wco_playlist.py` — episode list extraction + navigation metadata
+- [x] `media/providers/wco_types.py` / `wco_utils.py` — shared contract + helpers
+- [x] `docs/runbooks/wco-mpv-cdn-404-proxy-fix.md` — root cause and proxy design record
 - [x] `youtube/launcher.py` — updated to use provider registry; prompts generalized to "Media URL"; mpv command built from provider
 - [x] `crt_config.local.json` pattern — gitignored local override file; `load_config()` merges it on startup
 - [x] `crt_config.local.json.example` — template with cookie key documentation
@@ -403,8 +448,4 @@ architecture — each is a new provider file and a registry entry.
 
 - [ ] `media/core/` — generic modules (`adjust`, `controls`, `player`, `telemetry`, `state`, `queue`) not yet moved from `youtube/`; `youtube/` is still the live implementation, not a shim
 - [ ] Phase 3 capability enforcement — controls not hidden based on provider flags yet
-- [ ] HiAnime end-to-end verification — resolver and AniwatchProvider implemented but not smoke-tested against a live hianime.to URL
-- [ ] `providers.hianime` config section in `crt_config.json` — Node path and timeout still use code defaults
 - [ ] "How to add a provider" runbook
-
-

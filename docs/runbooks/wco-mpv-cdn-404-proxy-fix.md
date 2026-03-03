@@ -48,7 +48,7 @@ Since Python works and mpv doesn't, the fix is to put Python between mpv and the
 ```
 mpv → http://127.0.0.1:{port}/ (plain HTTP, no special headers)
   → _start_local_proxy (Python ThreadingHTTPServer, daemon thread)
-    → https://t01.wcostream.com/...mp4 (Python urllib with correct headers)
+    → https://t01.wcostream.com/getvid?evid=<tok2> (Python urllib with correct headers)
       ← 200/206 video/mp4 streamed back in 64KB chunks
   ← response forwarded to mpv
 ```
@@ -78,23 +78,63 @@ non-CDN URLs. The proxy bypasses this by passing `strict_final_url=False` —
 `127.0.0.1` is obviously not a WCO stream URL, but it is the correct target for mpv
 in this architecture.
 
+## CDN URL Resolution — The &json Endpoint
+
+The embed page JavaScript resolves the CDN URL using a `&json` suffix on the getvid
+endpoint:
+
+```javascript
+const videoUrl = server + '/getvid?evid=' + vsd + '&json';
+fetchJsonData(videoUrl).then(data => {
+    vp.src({ src: data, type: 'video/mp4' });
+});
+```
+
+`_fetch_getvid_url` in `wco_http.py` replicates this exactly: it calls
+`server/getvid?evid=<enc>&json` with the same XHR headers the embed page uses, then
+parses the JSON string response (e.g. `"https://t01.wcostream.com/getvid?evid=<tok2>"`)
+and uses that URL as the proxy target.
+
+This replaces the earlier redirect-following approach (`_follow_getvid_redirect`) and
+the lb-bypass probe (`_find_lb_cdn_url`), which were both more complex and less faithful
+to the browser's actual behaviour.
+
 ## WCO CDN Cluster Notes
 
-Not all WCO content is available. Three CDN clusters exist:
+Three CDN clusters exist. Resolution via `&json` endpoint works the same way for all:
 
-| Embed server | CDN cluster | Status |
-|---|---|---|
-| `neptun` | `t0X.wcostream.com`, `c0X.wcostream.com` | **Works** — used by recent anime (Naruto, One Piece, Bleach) |
-| `anime` | `m0X.wcostream.com` | **404** — content not hosted; old Western cartoons |
-| `ndisk` | `nd0X.wcostream.com` | **404** — content not hosted; some older anime |
+| Embed server | Load balancer | CDN nodes | Python access | Notes |
+|---|---|---|---|---|
+| `neptun` | `neptun.wcostream.com` | `t0X`, `c0X` | **works** | Most anime/manga series |
+| `anime` | `lb.wcostream.com` | `m01`, `m02` | **fails (404)** | Western cartoons, some older content |
+| `ndisk` | `ndisk.wcostream.com` | `nd0X` | unknown | Rarely seen in practice |
 
-If an episode returns 404 even through the proxy, the content is genuinely not on the
-CDN. This is not fixable in the resolver. The embed page JS itself falls back to
-`/error.mp4` for these episodes.
+**Works:** `wco.tv/naruto-episode-1` (t01), `wco.tv/one-piece-episode-1` (c02),
+`wco.tv/bleach-episode-1` (c02)
 
-**Works:** `wco.tv/naruto-episode-1`, `wco.tv/one-piece-episode-1`, `wco.tv/bleach-episode-1`
+**Fails:** `wco.tv/2-stupid-dogs-episode-1-door-jam` — uses `lb.wcostream.com` (m01/m02);
+m01/m02 CDN nodes return 404 to all Python HTTP clients (urllib, curl_cffi with any
+TLS impersonation). The browser plays it successfully. The exact server-side rejection
+mechanism is unknown — it is NOT a simple header or TLS fingerprint issue since every
+tested client and fingerprint combination returns the same 404. The proxy correctly
+surfaces this as a 404 error to mpv.
 
-**Does not work (content unavailable):** `wco.tv/2-stupid-dogs-*`, `wco.tv/dragon-ball-super-*`
+## The lb Cluster Investigation (2026-03-03)
+
+For `lb.wcostream.com` (Western cartoons), extensive investigation found:
+
+- `lb/getvid?evid=<enc>` → 302 redirect to `m01/getvid?evid=<tok2>` (different token)
+- `lb/getvid?evid=<enc>&json` → JSON: `"https://m01.wcostream.com/getvid?evid=<tok2>"`
+- Both `m01/getvid?evid=<enc>` and `m01/getvid?evid=<tok2>` → 404 from Python
+- Tested: urllib, curl_cffi Chrome120/124/131/Firefox133/Safari18/17 — all 404
+- No auth cookies set by lb in redirect response
+- m01/m02 are the only nodes (m03+ do not exist)
+- Browser (Chrome) plays successfully — mechanism unknown
+
+Conclusion: the lb cluster CDN nodes (m01/m02) require something the browser provides
+that no Python HTTP client can replicate. This is a hard limitation. The launcher
+returns a proxy 404 for lb cluster content; the user would need to watch that content
+in a browser directly.
 
 ## Relevant Code
 
@@ -102,5 +142,5 @@ CDN. This is not fixable in the resolver. The embed page JS itself falls back to
 |---|---|
 | `media/providers/wco_http.py` — `_start_local_proxy` | Proxy server implementation |
 | `media/providers/wco_http.py` — `_ThreadingHTTPServer` | Thread-safe HTTPServer base class |
-| `media/providers/wco_http.py` — `resolve_episode_http` | Calls proxy after CDN URL is resolved |
-| `media/providers/wco_http.py` — `_follow_getvid_redirect` | Follows first-hop getvid → CDN URL |
+| `media/providers/wco_http.py` — `_fetch_getvid_url` | Calls `&json` endpoint to get CDN URL |
+| `media/providers/wco_http.py` — `resolve_episode_http` | Orchestrates full resolution chain |

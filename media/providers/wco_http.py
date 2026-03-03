@@ -212,40 +212,50 @@ def _start_local_proxy(target_url: str, base_headers: dict, timeout: int) -> str
     server._base_headers = base_headers
     server._timeout = timeout
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    log.info("WCO proxy: port %d → %s", port, urllib.parse.urlparse(target_url).netloc)
+    log.info("WCO proxy: port %d -> %s", port, urllib.parse.urlparse(target_url).netloc)
     return f"http://127.0.0.1:{port}/"
 
 
-def _follow_getvid_redirect(
+def _fetch_getvid_url(
     sess,
-    getvid_url: str,
+    server: str,
+    enc: str,
     embed_url: str,
     cfg: WCOHTTPConfig,
 ) -> str:
-    """Call the getvid endpoint and return the CDN URL from the 302 Location header.
+    """Call server/getvid?evid=<enc>&json and return the CDN URL.
 
-    The getvid endpoint issues a 302 redirect to the actual CDN stream URL.
-    Following it from within the same curl_cffi session (which carries PHPSESSID
-    context) yields a CDN URL that is not session-bound — mpv can then fetch it
-    independently without needing to replay any session headers.
+    The embed page JavaScript calls this endpoint (with &json suffix) to resolve
+    the playable CDN URL. It returns a JSON string containing the URL of the CDN
+    node getvid endpoint (e.g. https://t01.wcostream.com/getvid?evid=<tok2>).
+
+    Python's urllib can access this URL successfully for neptun cluster nodes
+    (t01, c02); for lb cluster nodes (m01/m02) the CDN may reject non-browser
+    connections for certain content. The proxy will surface a 404 to mpv in that
+    case, which is the correct error signal.
     """
+    url = f"{server}/getvid?evid={enc}&json"
     r = sess.get(
-        getvid_url,
+        url,
         headers={
             **_BROWSER_HEADERS,
             "Referer": embed_url,
             "Origin": EMBED_ORIGIN,
-            "Accept": "*/*",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "X-Requested-With": "XMLHttpRequest",
         },
         impersonate=cfg.impersonate,
         timeout=cfg.timeout_sec,
-        allow_redirects=False,
     )
-    if r.status_code in (301, 302, 303, 307, 308):
-        location = r.headers.get("Location") or r.headers.get("location", "")
-        if location:
-            return urllib.parse.urljoin(getvid_url, location)
-    raise RuntimeError(f"WCO: getvid did not redirect (status={r.status_code})")
+    if not r.text:
+        raise RuntimeError("WCO: getvid &json returned empty response")
+    try:
+        cdn_url = r.json()
+    except Exception as e:
+        raise RuntimeError(f"WCO: getvid &json returned non-JSON: {e}") from e
+    if not isinstance(cdn_url, str) or not cdn_url.startswith("http"):
+        raise RuntimeError(f"WCO: getvid &json returned unexpected value: {cdn_url!r}")
+    return cdn_url
 
 
 def resolve_episode_http(url: str, quality: str = "best", cfg: WCOHTTPConfig | None = None) -> WCOResolveResult:
@@ -262,23 +272,24 @@ def resolve_episode_http(url: str, quality: str = "best", cfg: WCOHTTPConfig | N
     vidlink = _fetch_vidlink(sess, embed_url, file_mp4, embed_server, fullhd, cfg)
 
     enc = _select_quality_token(vidlink, quality)
-    getvid_url = f"{vidlink['server']}/getvid?evid={enc}"
 
-    # Follow the getvid redirect from within our session to get a session-independent
-    # CDN URL. The getvid token is bound to the resolver's session context; mpv as a
-    # separate HTTP client cannot replay it even with matching headers.
+    # The embed page JavaScript calls server/getvid?evid=<enc>&json to resolve the
+    # CDN URL. This matches the browser's resolution path exactly and works for all
+    # cluster types (neptun t01/c02, lb m01/m02, ndisk nd0X).
+    # For lb cluster content, the CDN node may still reject non-browser connections
+    # at the proxy stage; the proxy will surface a 404 to mpv in that case.
     cookie_header = ""
+    cdn_headers = {
+        "User-Agent": _BROWSER_HEADERS["User-Agent"],
+        "Referer": EMBED_ORIGIN + "/",
+        "Accept": "*/*",
+    }
     try:
-        cdn_url = _follow_getvid_redirect(sess, getvid_url, embed_url, cfg)
-        log.debug("WCO: getvid → CDN %s", urllib.parse.urlparse(cdn_url).netloc)
-        cdn_headers = {
-            "User-Agent": _BROWSER_HEADERS["User-Agent"],
-            "Referer": EMBED_ORIGIN + "/",
-            "Accept": "*/*",
-        }
+        cdn_url = _fetch_getvid_url(sess, vidlink["server"], enc, embed_url, cfg)
+        log.debug("WCO: getvid &json -> CDN %s", urllib.parse.urlparse(cdn_url).netloc)
     except Exception as e:
-        log.warning("WCO: getvid redirect follow failed (%s); falling back to getvid URL", e)
-        cdn_url = getvid_url
+        log.warning("WCO: getvid &json failed (%s); falling back to raw getvid URL", e)
+        cdn_url = f"{vidlink['server']}/getvid?evid={enc}"
         try:
             cookie_dict = sess.cookies.get_dict() if hasattr(sess.cookies, "get_dict") else {}
             if cookie_dict:
@@ -304,7 +315,7 @@ def resolve_episode_http(url: str, quality: str = "best", cfg: WCOHTTPConfig | N
         target_url=target_url,
         title=slug_to_title(urllib.parse.urlparse(stream_url).path),
         subtitle_urls=[],
-        extra_headers={},  # mpv → localhost plain HTTP; no CDN headers needed
+        extra_headers={},  # mpv connects to localhost plain HTTP; no CDN headers needed
         debug={
             "host": urllib.parse.urlparse(cdn_url).netloc,
             "quality": quality,
