@@ -1,6 +1,6 @@
 {
   "mpv_path": "D:\\Emulators\\mpv\\mpv.exe",
-  "yt_dlp_path": "D:\\Emulators\\yt-dlp\\yt-dlp_x86.exe",
+  "yt_dlp_path": "C:\\Users\\maver\\AppData\\Roaming\\Python\\Python314\\Scripts\\yt-dlp.exe",
   "youtube_ipc_duplex": true,
   "youtube_rect_guard_enabled": true,
   "youtube_rect_guard_interval_sec": 5.0,

@@ -16,7 +16,8 @@
       "Bash(python:*)",
       "Bash(\"D:\\\\Emulators\\\\yt-dlp\\\\yt-dlp_x86.exe\":*)",
       "Bash(\"D:/Emulators/yt-dlp/yt-dlp_x86.exe\":*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(py:*)"
     ]
   }
 }

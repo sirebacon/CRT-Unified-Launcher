@@ -36,6 +36,14 @@ def setup(config: dict) -> None:
         cookies_file=cookies_file,
     ))
 
+    # Tier 2 — curl_cffi-backed resolver for wco.tv / wcostream.tv
+    try:
+        from media.providers.wco import WCOProvider
+        register(WCOProvider())
+        log.debug("WCOProvider registered")
+    except Exception as e:
+        log.warning("WCOProvider could not be registered: %s", e)
+
     # Tier 2 — resolver-backed
     try:
         from media.providers.aniwatch import AniwatchProvider

@@ -59,8 +59,16 @@ class Provider(ABC):
         """Return None if the URL is valid for this provider, else an error string."""
         return None
 
-    def resolve_target(self, url: str) -> dict:
+    def resolve_target(self, url: str, quality: str = "best") -> dict:
         """Resolve the URL to playback info.
+
+        Args:
+            url:     the original URL to resolve.
+            quality: quality hint from the user (e.g. "best", "720p", "480p",
+                     "audio").  Tier 1 providers typically ignore this (quality
+                     is handled via --ytdl-format in mpv_extra_args); Tier 2
+                     providers that fetch a direct stream URL use it to select
+                     between quality variants returned by the remote API.
 
         Returns a dict with:
             target_url (str)       — the URL passed to mpv

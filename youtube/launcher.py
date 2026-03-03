@@ -564,7 +564,7 @@ def run() -> int:
         resolved = {"subtitle_urls": [], "extra_headers": {}}
         log.info("queue mode: temp playlist %s (%d items)", temp_playlist, len(queue_urls))
     else:
-        resolved = provider.resolve_target(url)
+        resolved = provider.resolve_target(url, args.quality)
         target_url = resolved["target_url"]
         # provider may have a tighter answer on is_playlist than URL inspection
         is_playlist = resolved.get("is_playlist", is_playlist)
