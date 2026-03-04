@@ -441,6 +441,7 @@ def run() -> int:
     is_queue = False
     queue_urls = []
     _continue_resume_pos: Optional[float] = None  # set when resuming from Continue lane
+    _continue_play_next: bool = False
 
     if args.queue_file:
         queue_urls = load_queue_file(args.queue_file)
@@ -455,10 +456,11 @@ def run() -> int:
     # Continue Watching lane — only shown when in-progress items exist
     _max_continue = int(cfg.get("media_continue_max_items", 20))
     if not url and not is_queue:
-        _sel_url, _sel_pos = run_continue_lane(max_items=_max_continue)
+        _sel_url, _sel_pos, _sel_play_next = run_continue_lane(max_items=_max_continue)
         if _sel_url:
             url = _sel_url
             _continue_resume_pos = _sel_pos
+            _continue_play_next = _sel_play_next
 
     if not url and not is_queue:
         session = load_session()
@@ -568,6 +570,17 @@ def run() -> int:
     else:
         resolved = provider.resolve_target(url, args.quality)
         target_url = resolved["target_url"]
+        # 6.2: Up Next — swap to next episode and re-resolve
+        if _continue_play_next:
+            _next_ep_url = resolved.get("next_episode_url")
+            if _next_ep_url:
+                log.info("continue up-next: %s -> %s", url, _next_ep_url)
+                url = _next_ep_url
+                resolved = provider.resolve_target(url, args.quality)
+                target_url = resolved["target_url"]
+            else:
+                log.warning("continue up-next: no next_episode_url for %s — playing current", url)
+                print("[media] No next episode available — playing current episode.")
         # provider may have a tighter answer on is_playlist than URL inspection
         is_playlist = resolved.get("is_playlist", is_playlist)
         log.info(

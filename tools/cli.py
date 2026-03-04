@@ -7,6 +7,7 @@ from tools import audio as audio_tools
 from tools import calibration as calibration_tools
 from tools import config as config_tools
 from tools import display as display_tools
+from tools import media as media_tools
 from tools import preset as preset_tools
 from tools import prereqs as prereq_tools
 from tools import session as session_tools
@@ -138,6 +139,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Preset name to save into (default: currently active preset)",
     )
 
+    # ------------------------------------------------------------------- media
+    p_media = sub.add_parser("media", help="Media progress and history diagnostics")
+    sub_media = p_media.add_subparsers(dest="media_cmd", required=True)
+    sub_media.add_parser("progress", help="Show Continue Watching progress entries")
+    sub_media.add_parser("history",  help="Show recent watch history entries and stats")
+
     # --------------------------------------------------------------- calibrate
     p_cal = sub.add_parser("calibrate", help="Moonlight window calibration")
     sub_cal = p_cal.add_subparsers(dest="calibrate_cmd", required=True)
@@ -249,6 +256,12 @@ def _dispatch(args: argparse.Namespace) -> int:
                     print("[preset] FAIL: no active preset set — use --name to specify one")
                     return 1
             return preset_tools.print_preset_save(preset_tools.preset_save(name))
+
+    if args.category == "media":
+        if args.media_cmd == "progress":
+            return media_tools.media_progress()
+        if args.media_cmd == "history":
+            return media_tools.media_history()
 
     if args.category == "calibrate":
         if args.calibrate_cmd == "adjust":
