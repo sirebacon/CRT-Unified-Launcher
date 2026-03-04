@@ -100,3 +100,17 @@ class Provider(ABC):
     def mpv_extra_args(self, url: str, quality: str, config: dict) -> list:
         """Return extra CLI args to append to the mpv command for this provider."""
         return []
+
+    def get_continue_metadata(self, url: str) -> dict:
+        """Return identity metadata for the Continue Watching system.
+
+        Returns a dict with:
+            continue_key (str)        — stable identity, e.g. "youtube:video:<id>"
+            entity_type (str)         — "video" or "series"
+            series_title (str)        — optional
+            episode_title (str)       — optional
+            episode_index (int|None)  — optional, 0-based index in series
+            episode_url (str)         — optional, episode-level URL
+        Providers that don't support continue watching return {}.
+        """
+        return {}

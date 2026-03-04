@@ -88,6 +88,32 @@ class YouTubeProvider(Provider):
             "current_index": 0,
         }
 
+    def get_continue_metadata(self, url: str) -> dict:
+        try:
+            parsed = urlparse(url)
+            qs = parse_qs(parsed.query)
+            if parsed.netloc in _VALID_HOSTS:
+                video_ids = qs.get("v", [])
+                if video_ids:
+                    video_id = video_ids[0]
+                elif parsed.netloc == "youtu.be":
+                    video_id = parsed.path.lstrip("/").split("/")[0]
+                else:
+                    return {}
+                if not video_id:
+                    return {}
+                return {
+                    "continue_key":  f"youtube:video:{video_id}",
+                    "entity_type":   "video",
+                    "series_title":  "",
+                    "episode_title": "",
+                    "episode_index": None,
+                    "episode_url":   url,
+                }
+        except Exception:
+            pass
+        return {}
+
     def mpv_extra_args(self, url: str, quality: str, config: dict) -> list:
         # Collect all --ytdl-raw-options entries into a single flag.
         # mpv replaces the entire ytdl-raw-options list each time you pass

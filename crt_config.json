@@ -5,6 +5,10 @@
   "youtube_rect_guard_enabled": true,
   "youtube_rect_guard_interval_sec": 5.0,
   "youtube_audio_device": "",
+  "media_continue_enabled": true,
+  "media_continue_max_items": 20,
+  "media_progress_save_interval_sec": 15,
+  "media_completion_threshold_pct": 92,
   "youtube_quality_presets": {
     "best": {},
     "720p": {

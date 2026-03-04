@@ -191,4 +191,5 @@ Controls while playing:
 - `docs/configuration.md` - config and profile details
 - `docs/usage.md` - menu options and workflow
 - `docs/architecture.md` - session lifecycle and components
+- `docs/maintenance/README.md` - maintainer component map and regression checklist
 - `docs/TODO.md` - active prioritized work list

@@ -16,6 +16,12 @@ from session.mpv_ipc import MpvIpc
 from session.window_utils import find_window, get_rect, move_window, get_window_title
 from session.audio import get_current_audio_device_name, set_default_audio_best_effort
 from media.browser_launcher import launch_system_browser, launch_playwright_browser
+from youtube.progress import mark_completed, write_checkpoint
+from youtube.media_history import (
+    add_entry as _history_add_entry,
+    import_legacy_history,
+)
+from youtube.continue_ui import run_continue_lane, run_media_history_screen
 
 from youtube.config import (
     _MPV_PROFILE_PATH,
@@ -44,7 +50,6 @@ from youtube.state import (
     add_to_history,
     get_bookmarks,
     load_favorites,
-    load_history,
     load_ui_prefs,
     load_session,
     load_zoom_presets,
@@ -111,39 +116,13 @@ def _run_favorites_menu() -> Optional[str]:
     except (EOFError, KeyboardInterrupt):
         return None
     if pick.lower() == "h":
-        return _run_history_menu()
+        return run_media_history_screen()
     if pick.isdigit():
         idx = int(pick) - 1
         if 0 <= idx < len(favs):
             return favs[idx].get("url")
     return None
 
-
-def _run_history_menu() -> Optional[str]:
-    """Show recent history (last 10). Returns a URL to load, or None."""
-    hist = load_history()
-    if not hist:
-        print("\n  No history yet.")
-        time.sleep(1.5)
-        return None
-    recent = list(reversed(hist[-10:]))
-    os.system("cls" if os.name == "nt" else "clear")
-    print("=== Recent History ===")
-    for i, entry in enumerate(recent, 1):
-        title = entry.get("title", entry.get("url", "?"))
-        print(f"  {i:2d}) {title}")
-    print()
-    print("  B) Back")
-    print("Pick: ", end="", flush=True)
-    try:
-        pick = input().strip()
-    except (EOFError, KeyboardInterrupt):
-        return None
-    if pick.isdigit():
-        idx = int(pick) - 1
-        if 0 <= idx < len(recent):
-            return recent[idx].get("url")
-    return None
 
 
 def _cycle_zoom_preset(
@@ -461,6 +440,7 @@ def run() -> int:
     url: Optional[str] = args.url
     is_queue = False
     queue_urls = []
+    _continue_resume_pos: Optional[float] = None  # set when resuming from Continue lane
 
     if args.queue_file:
         queue_urls = load_queue_file(args.queue_file)
@@ -468,6 +448,17 @@ def run() -> int:
             print("[youtube] Queue file is empty or could not be read.")
             return 1
         is_queue = True
+
+    # One-time legacy history migration (no-op after first run)
+    import_legacy_history()
+
+    # Continue Watching lane — only shown when in-progress items exist
+    _max_continue = int(cfg.get("media_continue_max_items", 20))
+    if not url and not is_queue:
+        _sel_url, _sel_pos = run_continue_lane(max_items=_max_continue)
+        if _sel_url:
+            url = _sel_url
+            _continue_resume_pos = _sel_pos
 
     if not url and not is_queue:
         session = load_session()
@@ -519,7 +510,11 @@ def run() -> int:
     resume_to_sec: Optional[float] = None
     resume_playlist_pos: Optional[int] = None
 
-    if url:
+    # Continue Watching resume position takes priority over session resume prompt
+    if _continue_resume_pos is not None:
+        resume_to_sec = _continue_resume_pos
+        log.info("continue watching resume: pos=%.1fs", resume_to_sec)
+    elif url:
         session = load_session()
         if session and session.get("url") == url:
             pos_sec = session.get("position_sec", 0.0)
@@ -579,6 +574,22 @@ def run() -> int:
             "provider=%s resolved target=%s is_playlist=%s",
             provider.name(), target_url, is_playlist,
         )
+
+    # Continue Watching metadata — stable identity key for progress tracking
+    _continue_meta: dict = {}
+    if url and provider:
+        _continue_meta = provider.get_continue_metadata(url)
+        # For HiAnime, episode_index may not be in cache yet; update after resolve
+        if _continue_meta and "episode_index" not in _continue_meta and resolved.get("current_index") is not None:
+            _continue_meta["episode_index"] = resolved["current_index"]
+    _continue_key: str = _continue_meta.get("continue_key", "")
+    _continue_provider: str = _continue_meta.get("entity_type", "video")
+    log.debug("continue_meta: key=%s", _continue_key)
+
+    # Progress / history config knobs
+    _progress_save_interval_sec = float(cfg.get("media_progress_save_interval_sec", 15))
+    _completion_threshold_pct   = float(cfg.get("media_completion_threshold_pct", 92))
+    _media_continue_enabled     = bool(cfg.get("media_continue_enabled", True))
 
     # Tier 3: browser-backed provider — skip mpv entirely
     if not resolved.get("requires_mpv", True):
@@ -754,6 +765,7 @@ def run() -> int:
         _quit_flag = False
         _hianime_skip_to_next = False
         _hianime_skip_to_prev = False
+        _last_progress_checkpoint_at: float = time.monotonic()
         _last_visible_redraw: float = time.monotonic()
         _last_hidden_status_redraw: float = 0.0
         _transition_watch_active: bool = False
@@ -1091,6 +1103,30 @@ def run() -> int:
                     show_compact_status(title, playlist_pos, playlist_count, telemetry=last_telemetry)
                     _last_hidden_status_redraw = now
 
+            # Progress checkpoint (every N seconds, min-delta guard inside upsert)
+            if (
+                _media_continue_enabled and _continue_key and ipc_connected
+                and (now - _last_progress_checkpoint_at) >= _progress_save_interval_sec
+            ):
+                _last_progress_checkpoint_at = now
+                _pos = last_telemetry.get("time_pos") if last_telemetry else None
+                _dur = last_telemetry.get("duration") if last_telemetry else None
+                if _pos is not None:
+                    write_checkpoint(
+                        continue_key=_continue_key,
+                        provider=provider.name().lower() if provider else "",
+                        entity_type=_continue_meta.get("entity_type", "video"),
+                        title=title,
+                        sub_title=_continue_meta.get("episode_title", ""),
+                        target_url=url or "",
+                        episode_url=_continue_meta.get("episode_url", url or ""),
+                        episode_index=_continue_meta.get("episode_index"),
+                        position_sec=_pos,
+                        duration_sec=_dur,
+                        completion_threshold_pct=_completion_threshold_pct,
+                        max_items=_max_continue,
+                    )
+
             if not msvcrt.kbhit():
                 time.sleep(0.05)
                 continue
@@ -1232,11 +1268,26 @@ def run() -> int:
                     status_width = layout.get("width")
                     last_status_text = layout.get("status_text")
                 elif ch in (b"h", b"H"):
-                    picked = _run_history_menu()
+                    picked = run_media_history_screen()
                     if picked:
                         print(f"  URL: {picked}")
                         print("  (Restart launch_youtube.py with this URL to play.)")
                         time.sleep(2)
+                    layout = show_now_playing(
+                        title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
+                        telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
+                    )
+                    status_row = layout.get("status_row")
+                    status_width = layout.get("width")
+                    last_status_text = layout.get("status_text")
+                elif ch in (b"k", b"K"):
+                    if _media_continue_enabled and _continue_key:
+                        mark_completed(_continue_key)
+                        log.info("manual mark-completed: key=%s", _continue_key)
+                        print("\n  Marked as completed.")
+                    else:
+                        print("\n  No active continue entry.")
+                    time.sleep(0.8)
                     layout = show_now_playing(
                         title, is_playlist, playlist_pos, playlist_count, zoom_locked, zoom_preset_name,
                         telemetry=last_telemetry, show_advanced_telemetry=show_telemetry_panel, episode_has_next=_ep_has_next, episode_has_prev=_ep_has_prev,
@@ -1387,6 +1438,41 @@ def run() -> int:
                 pl_pos_0 = pl_pos
             save_session(url, title, is_playlist, pl_pos_0, pos_sec)
             log.info("session saved: pos=%.1fs playlist_pos=%s", pos_sec or 0, pl_pos_0)
+
+        # Progress finalization — force-write final outcome, bypassing min-delta guard
+        if _media_continue_enabled and _continue_key and url:
+            _final_pos = pos_sec if pos_sec is not None else 0.0
+            _final_dur = last_telemetry.get("duration") if last_telemetry else None
+            if _final_dur is None and ipc_connected:
+                _final_dur = ipc.get_property("duration")
+            _outcome, _written = write_checkpoint(
+                continue_key=_continue_key,
+                provider=provider.name().lower() if provider else "",
+                entity_type=_continue_meta.get("entity_type", "video"),
+                title=title,
+                sub_title=_continue_meta.get("episode_title", ""),
+                target_url=url or "",
+                episode_url=_continue_meta.get("episode_url", url or ""),
+                episode_index=_continue_meta.get("episode_index"),
+                position_sec=_final_pos,
+                duration_sec=_final_dur,
+                completion_threshold_pct=_completion_threshold_pct,
+                max_items=_max_continue,
+                force=True,
+                skip_signal=_hianime_skip_to_next or _hianime_skip_to_prev,
+            )
+            if _written:
+                log.info("progress finalized: key=%s outcome=%s", _continue_key, _outcome)
+                _final_pct = (_final_pos / _final_dur * 100) if _final_dur else 0.0
+                _history_add_entry(
+                    provider=provider.name().lower() if provider else "",
+                    title=title,
+                    url=url,
+                    continue_key=_continue_key,
+                    playback_outcome=_outcome,
+                    duration_sec=_final_dur,
+                    progress_pct=_final_pct,
+                )
 
         ipc.close()
         _mpv_stderr_fh.close()

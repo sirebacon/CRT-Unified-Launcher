@@ -7,6 +7,7 @@
 - `docs/usage.md` - launcher menu options and day-to-day commands
 - `docs/configuration.md` - `crt_config.json`, session profiles, manifest structure
 - `docs/architecture.md` - component responsibilities and runtime flow
+- `docs/maintenance/README.md` - maintainer docs (component ownership + regression checklists)
 - `docs/TODO.md` - prioritized active work list
 
 ## LaunchBox
@@ -21,6 +22,7 @@
 ## Runbooks
 
 - `docs/runbooks/session-restore-recovery.md` - manual recovery if session config restore fails
+- `docs/runbooks/media-history-continue-watching-plan.md` - design plan for Netflix-style continue watching + unified history (YouTube + HiAnime)
 - `docs/runbooks/re-gog-crt-display.md` - RE1/RE2/RE3 GOG CRT display investigation and known limitations
 - `docs/runbooks/resident-evil-stack-automation.md` - RE stack operations runbook (manual mode is the current supported workflow; auto mode is on hold)
 - `docs/runbooks/resident-evil-stack-code-flow.md` - code-level RE stack flow and module layout (`launch_resident_evil_stack.py` + `session/*`), including legacy auto-mode notes

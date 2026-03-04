@@ -11,7 +11,7 @@ import os
 import re
 import subprocess
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -107,6 +107,31 @@ class AniwatchProvider(Provider):
 
     def is_playlist(self, url: str) -> bool:
         return False  # each hianime.to URL is a single episode
+
+    def get_continue_metadata(self, url: str) -> dict:
+        try:
+            parsed = urlparse(url)
+            path_parts = [p for p in parsed.path.split("/") if p]
+            if len(path_parts) < 2 or path_parts[0] != "watch":
+                return {}
+            series_slug = path_parts[1]   # e.g. "super-demon-hero-wataru-4045"
+            qs = parse_qs(parsed.query) if hasattr(parsed, "query") else {}
+            episode_id = (qs.get("ep", [""]))[0]
+            # episode_index from resolver cache if available
+            episode_index = None
+            if url in self._cache:
+                episode_index = self._cache[url].get("current_index")
+            return {
+                "continue_key":  f"hianime:series:{series_slug}",
+                "entity_type":   "series",
+                "series_title":  "",
+                "episode_title": "",
+                "episode_index": episode_index,
+                "episode_url":   url,
+                "episode_id":    episode_id,
+            }
+        except Exception:
+            return {}
 
     def mpv_extra_args(self, url: str, quality: str, config: dict) -> list:
         return ["--no-ytdl"]
