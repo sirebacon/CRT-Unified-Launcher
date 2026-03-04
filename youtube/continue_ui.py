@@ -1,7 +1,8 @@
-"""Continue Watching UI surfaces — lane and history screen."""
+﻿"""Continue Watching UI surfaces â€” lane and history screen."""
 
 import logging
 import os
+import re
 import time
 from typing import Optional
 
@@ -18,11 +19,42 @@ def _fmt_time(seconds: float) -> str:
     return f"{m}:{s:02d}"
 
 
+def _humanize_slug(slug: str) -> str:
+    text = (slug or "").strip().replace("_", "-")
+    text = re.sub(r"-+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text.title()
+
+
+def _series_label(item: dict) -> str:
+    series = (item.get("series_title") or "").strip()
+    if series:
+        return series
+    ckey = (item.get("continue_key") or "").strip()
+    m = re.match(r"^[^:]+:series:(.+)$", ckey)
+    if not m:
+        return ""
+    return _humanize_slug(m.group(1))
+
+
+def _continue_row_label(item: dict) -> str:
+    episode = (item.get("title") or "").strip()
+    sub = (item.get("sub_title") or "").strip()
+    series = _series_label(item)
+    if series and episode and series.lower() != episode.lower():
+        base = f"{series} - {episode}"
+    else:
+        base = episode or series or "Untitled"
+    if sub:
+        base += f"  [{sub}]"
+    return base
+
+
 def run_media_history_screen(provider_filter: str = "") -> Optional[str]:
     """Show unified watch history. Returns a URL to open, or None."""
     _filter = provider_filter
     _PROVIDER_LABELS = {"": "All", "youtube": "YouTube", "hianime": "HiAnime"}
-    _OUTCOME_BADGE   = {"in_progress": "▶", "completed": "✓", "skipped": "»"}
+    _OUTCOME_BADGE   = {"in_progress": "â–¶", "completed": "âœ“", "skipped": "Â»"}
     PAGE_SIZE = 20
 
     while True:
@@ -102,11 +134,10 @@ def run_continue_lane(max_items: int = 20) -> tuple[Optional[str], Optional[floa
         print("\nContinue Watching:")
         for i, item in enumerate(_continue_items, 1):
             pct       = item.get("progress_pct", 0)
-            sub       = item.get("sub_title", "")
-            label     = item["title"] + (f"  [{sub}]" if sub else "")
+            label     = _continue_row_label(item)
             date      = item.get("last_watched_at", "")[:10]
             ep_idx    = item.get("episode_index")
-            next_hint = (f"  → Ep {ep_idx + 2}" if item.get("provider") == "hianime"
+            next_hint = (f"  â†’ Ep {ep_idx + 2}" if item.get("provider") == "hianime"
                          and ep_idx is not None else "")
             print(f"  {i}) {label}{next_hint}  {pct:.0f}%  {date}")
         print()
@@ -208,7 +239,10 @@ def run_continue_lane(max_items: int = 20) -> tuple[Optional[str], Optional[floa
                 log.info("continue watching: selected key=%s url=%s pos=%s",
                          sel.get("continue_key"), sel_url, sel_pos)
                 return sel_url, sel_pos, False
-        # out-of-range digit or unrecognized → _dirty stays False → URL prompt
+        elif pick.startswith(("http://", "https://")):
+            # Allow direct URL entry from the Continue lane to avoid a second prompt.
+            return pick, None, False
+        # out-of-range digit or unrecognized â†’ _dirty stays False â†’ URL prompt
 
     return None, None, False
 
@@ -219,7 +253,7 @@ def run_recent_activity_screen() -> Optional[str]:
     Returns a URL to open, or None.
     """
     PAGE_SIZE = 25
-    _OUTCOME_BADGE = {"in_progress": "▶", "completed": "✓", "skipped": "»"}
+    _OUTCOME_BADGE = {"in_progress": "â–¶", "completed": "âœ“", "skipped": "Â»"}
 
     while True:
         in_prog = get_continue_lane(max_items=15)
@@ -291,3 +325,4 @@ def run_recent_activity_screen() -> Optional[str]:
             if 0 <= idx < len(feed):
                 return feed[idx]["url"]
     return None
+

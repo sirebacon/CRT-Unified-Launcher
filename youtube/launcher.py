@@ -1,4 +1,4 @@
-"""Main media session orchestrator (YouTube, HiAnime, and generic URLs)."""
+﻿"""Main media session orchestrator (YouTube, HiAnime, and generic URLs)."""
 
 import argparse
 import logging
@@ -16,7 +16,7 @@ from session.mpv_ipc import MpvIpc
 from session.window_utils import find_window, get_rect, move_window, get_window_title
 from session.audio import get_current_audio_device_name, set_default_audio_best_effort
 from media.browser_launcher import launch_system_browser, launch_playwright_browser
-from youtube.progress import mark_completed, write_checkpoint
+from youtube.progress import get_continue_lane as _get_continue_lane_items, mark_completed, write_checkpoint
 from youtube.media_history import (
     add_entry as _history_add_entry,
     import_legacy_history,
@@ -359,8 +359,8 @@ def _autoplay_countdown(next_url: str, next_title: str, seconds: int = 5) -> Opt
     """Show a countdown and return next_url when the timer elapses.
 
     Keys accepted during the countdown:
-      N       — play immediately
-      C / Q / ESC — cancel autoplay
+      N       â€” play immediately
+      C / Q / ESC â€” cancel autoplay
 
     Returns next_url to proceed, or None if cancelled.
     """
@@ -372,7 +372,7 @@ def _autoplay_countdown(next_url: str, next_title: str, seconds: int = 5) -> Opt
     print()
     for remaining in range(seconds, 0, -1):
         print(
-            f"\r  Next: {label}  —  starting in {remaining}s  "
+            f"\r  Next: {label}  â€”  starting in {remaining}s  "
             "[N=play now  C/Q=cancel]     ",
             end="",
             flush=True,
@@ -442,6 +442,7 @@ def run() -> int:
     queue_urls = []
     _continue_resume_pos: Optional[float] = None  # set when resuming from Continue lane
     _continue_play_next: bool = False
+    _continue_lane_shown: bool = False
 
     if args.queue_file:
         queue_urls = load_queue_file(args.queue_file)
@@ -453,16 +454,18 @@ def run() -> int:
     # One-time legacy history migration (no-op after first run)
     import_legacy_history()
 
-    # Continue Watching lane — only shown when in-progress items exist
+    # Continue Watching lane â€” only shown when in-progress items exist
     _max_continue = int(cfg.get("media_continue_max_items", 20))
     if not url and not is_queue:
-        _sel_url, _sel_pos, _sel_play_next = run_continue_lane(max_items=_max_continue)
-        if _sel_url:
-            url = _sel_url
-            _continue_resume_pos = _sel_pos
-            _continue_play_next = _sel_play_next
+        _continue_lane_shown = bool(_get_continue_lane_items(max_items=_max_continue))
+        if _continue_lane_shown:
+            _sel_url, _sel_pos, _sel_play_next = run_continue_lane(max_items=_max_continue)
+            if _sel_url:
+                url = _sel_url
+                _continue_resume_pos = _sel_pos
+                _continue_play_next = _sel_play_next
 
-    if not url and not is_queue:
+    if not url and not is_queue and not _continue_lane_shown:
         session = load_session()
         if session:
             print(f"[youtube] Last session: {session.get('title') or session['url']}")
@@ -487,7 +490,7 @@ def run() -> int:
         elif user_input.lower() == "r" and session:
             url = session["url"]
         elif not user_input and session:
-            # Enter with no input when a last session exists → resume it
+            # Enter with no input when a last session exists â†’ resume it
             url = session["url"]
         elif user_input:
             url = user_input
@@ -503,7 +506,7 @@ def run() -> int:
         provider = _provider_registry.get_provider_or_generic(url)
         err = provider.validate(url)
         if err:
-            log.warning("exit: invalid URL — %s", err)
+            log.warning("exit: invalid URL â€” %s", err)
             print(f"[media] {err}")
             return 1
         log.info("provider selected: %s", provider.name())
@@ -552,13 +555,21 @@ def run() -> int:
         url is not None and provider is not None and provider.is_playlist(url)
     )
     if is_playlist and not is_queue:
-        print("[media] Playlist URL detected — autoplay enabled.")
+        print("[media] Playlist URL detected â€” autoplay enabled.")
 
     # Show quality info
     if args.quality and args.quality != "best":
         print(f"[youtube] Quality preset: {args.quality}")
     else:
         print(f"[youtube] Quality: best | 720p | 480p | audio  (use --quality to change)")
+
+    def _resolve_or_report(_url: str) -> Optional[dict]:
+        try:
+            return provider.resolve_target(_url, args.quality)
+        except Exception as e:
+            log.exception("provider resolve failed for %s", _url)
+            print(f"[media] Failed to resolve stream: {e}")
+            return None
 
     # Build mpv command
     if is_queue:
@@ -568,19 +579,23 @@ def run() -> int:
         resolved = {"subtitle_urls": [], "extra_headers": {}}
         log.info("queue mode: temp playlist %s (%d items)", temp_playlist, len(queue_urls))
     else:
-        resolved = provider.resolve_target(url, args.quality)
+        resolved = _resolve_or_report(url)
+        if not resolved:
+            return 1
         target_url = resolved["target_url"]
-        # 6.2: Up Next — swap to next episode and re-resolve
+        # 6.2: Up Next â€” swap to next episode and re-resolve
         if _continue_play_next:
             _next_ep_url = resolved.get("next_episode_url")
             if _next_ep_url:
                 log.info("continue up-next: %s -> %s", url, _next_ep_url)
                 url = _next_ep_url
-                resolved = provider.resolve_target(url, args.quality)
+                resolved = _resolve_or_report(url)
+                if not resolved:
+                    return 1
                 target_url = resolved["target_url"]
             else:
-                log.warning("continue up-next: no next_episode_url for %s — playing current", url)
-                print("[media] No next episode available — playing current episode.")
+                log.warning("continue up-next: no next_episode_url for %s â€” playing current", url)
+                print("[media] No next episode available â€” playing current episode.")
         # provider may have a tighter answer on is_playlist than URL inspection
         is_playlist = resolved.get("is_playlist", is_playlist)
         log.info(
@@ -588,7 +603,7 @@ def run() -> int:
             provider.name(), target_url, is_playlist,
         )
 
-    # Continue Watching metadata — stable identity key for progress tracking
+    # Continue Watching metadata â€” stable identity key for progress tracking
     _continue_meta: dict = {}
     if url and provider:
         _continue_meta = provider.get_continue_metadata(url)
@@ -604,7 +619,7 @@ def run() -> int:
     _completion_threshold_pct   = float(cfg.get("media_completion_threshold_pct", 92))
     _media_continue_enabled     = bool(cfg.get("media_continue_enabled", True))
 
-    # Tier 3: browser-backed provider — skip mpv entirely
+    # Tier 3: browser-backed provider â€” skip mpv entirely
     if not resolved.get("requires_mpv", True):
         profile_id = resolved.get("browser_profile", "")
         provider_mode = resolved.get("launch_mode", "browser")
@@ -691,7 +706,7 @@ def run() -> int:
         return 1
     log.debug("pre-flight ok: mpv=%s  yt-dlp=%s", mpv_path, yt_dlp_path)
 
-    # Launch mpv — mpv is a GUI process on Windows so stderr isn't useful;
+    # Launch mpv â€” mpv is a GUI process on Windows so stderr isn't useful;
     # use --log-file instead so mpv writes its own internal log to disk.
     _mpv_log_path = os.path.join(_PROJECT_ROOT, "runtime", "mpv.log")
     # Force a fresh file each run so tails only show current-session events.
@@ -723,14 +738,14 @@ def run() -> int:
             early_rc = proc.poll()
             if early_rc is not None:
                 log.warning(
-                    "mpv exited early (code=%d) before window appeared — "
+                    "mpv exited early (code=%d) before window appeared â€” "
                     "check runtime/mpv.log for yt-dlp errors",
                     early_rc,
                 )
-                print(f"[youtube] mpv exited early (code={early_rc}) — check runtime/mpv.log")
+                print(f"[youtube] mpv exited early (code={early_rc}) â€” check runtime/mpv.log")
             else:
                 log.warning("mpv window not found within 15s (mpv still running)")
-            print("[youtube] mpv window not found within 15s — continuing without window move.")
+            print("[youtube] mpv window not found within 15s â€” continuing without window move.")
         else:
             log.info("mpv window hwnd=0x%x  first move to (%d,%d,%d,%d)", hwnd, x, y, w, h)
             print(f"[youtube] Window found. Moving to CRT rect ({x}, {y}, {w}x{h})...")
@@ -740,7 +755,7 @@ def run() -> int:
         ipc_connected = ipc.connect(retries=10, delay=0.5)
         if not ipc_connected:
             log.warning("IPC connection failed")
-            print("[youtube] WARNING: IPC connection failed — keyboard control unavailable.")
+            print("[youtube] WARNING: IPC connection failed â€” keyboard control unavailable.")
             print("[youtube] Hint: check pipe name and mpv --input-ipc-server support.")
         else:
             log.info("IPC connected (mode=%s, requested_duplex=%s)", ipc.mode, use_duplex_ipc)
@@ -762,6 +777,52 @@ def run() -> int:
         if url:
             add_to_history(url, title)
 
+        # Duration fallback state:
+        # If mpv duration is missing, estimate using time-pos + playtime-remaining.
+        # We only trust estimated duration for completion once it is stable for
+        # several consecutive samples.
+        _est_duration_prev: Optional[float] = None
+        _est_duration_streak: int = 0
+
+        def _resolve_duration_for_progress(
+            pos_sec: Optional[float],
+            duration_sec: Optional[float],
+        ) -> tuple[Optional[float], str, bool]:
+            nonlocal _est_duration_prev, _est_duration_streak
+
+            if duration_sec and duration_sec > 0:
+                _est_duration_prev = None
+                _est_duration_streak = 0
+                return float(duration_sec), "actual", True
+
+            if not ipc_connected or pos_sec is None:
+                return None, "unknown", False
+
+            try:
+                remaining = ipc.get_property("playtime-remaining")
+            except Exception:
+                remaining = None
+
+            if remaining is None:
+                return None, "unknown", False
+
+            try:
+                est = float(pos_sec) + float(remaining)
+            except Exception:
+                return None, "unknown", False
+
+            if est <= 0:
+                return None, "unknown", False
+
+            if _est_duration_prev is not None and abs(est - _est_duration_prev) <= 2.0:
+                _est_duration_streak += 1
+            else:
+                _est_duration_streak = 1
+            _est_duration_prev = est
+
+            # Require repeated stable estimates before allowing completion by estimate.
+            return est, "estimated", _est_duration_streak >= 3
+
         # --- Loop state ---
         adjust_mode = False
         step_idx = 2  # default 10 px
@@ -778,6 +839,8 @@ def run() -> int:
         _quit_flag = False
         _hianime_skip_to_next = False
         _hianime_skip_to_prev = False
+        _final_pos_override: Optional[float] = None
+        _last_seek_pos_hint: Optional[float] = None
         _last_progress_checkpoint_at: float = time.monotonic()
         _last_visible_redraw: float = time.monotonic()
         _last_hidden_status_redraw: float = 0.0
@@ -790,6 +853,19 @@ def run() -> int:
         _transition_watch_budget_exhausted: bool = False
         _last_rect_watch_at: float = 0.0
         _last_rect_guard_at: float = 0.0
+
+        def _capture_pos_before_quit() -> None:
+            nonlocal _final_pos_override
+            if not ipc_connected:
+                return
+            try:
+                p = ipc.get_property("time-pos")
+            except Exception:
+                p = None
+            if p is not None:
+                _final_pos_override = float(p)
+            elif _last_seek_pos_hint is not None:
+                _final_pos_override = float(_last_seek_pos_hint)
 
         zoom_locked: bool = False
         zoom_preset_name: Optional[str] = None
@@ -985,7 +1061,7 @@ def run() -> int:
                             )
                             _transition_watch_active = False
                             # Force the rect-guard to run immediately after the
-                            # transition settles — mpv can still drift post-codec-init.
+                            # transition settles â€” mpv can still drift post-codec-init.
                             _last_rect_guard_at = 0.0
                     else:
                         _transition_watch_stable_hits = 0
@@ -1046,7 +1122,7 @@ def run() -> int:
                         _rect_to_text(current),
                     )
                     move_window(hwnd, x, y, w, h, strip_caption=True)
-                    # Rect drifted → mpv likely did a post-load reinit; re-apply zoom too.
+                    # Rect drifted â†’ mpv likely did a post-load reinit; re-apply zoom too.
                     if zoom_locked and zoom_preset_name and ipc_connected:
                         for p in load_zoom_presets():
                             if p.get("name") == zoom_preset_name:
@@ -1125,6 +1201,7 @@ def run() -> int:
                 _pos = last_telemetry.get("time_pos") if last_telemetry else None
                 _dur = last_telemetry.get("duration") if last_telemetry else None
                 if _pos is not None:
+                    _dur_eff, _dur_source, _dur_confident = _resolve_duration_for_progress(_pos, _dur)
                     write_checkpoint(
                         continue_key=_continue_key,
                         provider=provider.name().lower() if provider else "",
@@ -1135,7 +1212,9 @@ def run() -> int:
                         episode_url=_continue_meta.get("episode_url", url or ""),
                         episode_index=_continue_meta.get("episode_index"),
                         position_sec=_pos,
-                        duration_sec=_dur,
+                        duration_sec=_dur_eff,
+                        duration_source=_dur_source,
+                        estimated_confident=_dur_confident,
                         completion_threshold_pct=_completion_threshold_pct,
                         max_items=_max_continue,
                     )
@@ -1146,7 +1225,7 @@ def run() -> int:
 
             _last_keypress = time.monotonic()
 
-            # Restore controls if hidden — don't consume the key, process it normally
+            # Restore controls if hidden â€” don't consume the key, process it normally
             if controls_hidden and not adjust_mode:
                 controls_hidden = False
                 clear_compact_status_line()
@@ -1184,10 +1263,28 @@ def run() -> int:
                     ch2 = msvcrt.getch()
                     if ch2 == b"K":
                         ipc.seek(-10)
+                        _base = None
+                        try:
+                            _base = ipc.get_property("time-pos")
+                        except Exception:
+                            _base = None
+                        if _base is None and last_telemetry:
+                            _base = last_telemetry.get("time_pos")
+                        if _base is not None:
+                            _last_seek_pos_hint = max(0.0, float(_base) - 10.0)
                         print("\n  Seek -10s.")
                         time.sleep(0.15)
                     elif ch2 == b"M":
                         ipc.seek(10)
+                        _base = None
+                        try:
+                            _base = ipc.get_property("time-pos")
+                        except Exception:
+                            _base = None
+                        if _base is None and last_telemetry:
+                            _base = last_telemetry.get("time_pos")
+                        if _base is not None:
+                            _last_seek_pos_hint = max(0.0, float(_base) + 10.0)
                         print("\n  Seek +10s.")
                         time.sleep(0.15)
                     elif ch2 == b"H":
@@ -1213,6 +1310,7 @@ def run() -> int:
                         print("\n  Next video.")
                         time.sleep(0.2)
                     elif _ep_has_next:
+                        _capture_pos_before_quit()
                         ipc.quit()
                         _hianime_skip_to_next = True
                         log.info("hianime: manual skip to next episode")
@@ -1225,6 +1323,7 @@ def run() -> int:
                         print("\n  Previous video.")
                         time.sleep(0.2)
                     elif _ep_has_prev:
+                        _capture_pos_before_quit()
                         ipc.quit()
                         _hianime_skip_to_prev = True
                         log.info("hianime: manual skip to previous episode")
@@ -1351,6 +1450,7 @@ def run() -> int:
                                 idx_ = int(pick) - 1
                                 if 0 <= idx_ < len(marks):
                                     ipc.seek_absolute(marks[idx_]["time_sec"])
+                                    _last_seek_pos_hint = max(0.0, float(marks[idx_]["time_sec"]))
                                     log.info("jumped to bookmark %s", marks[idx_]["name"])
                                     print(f"  Jumped to {_fmt_time(marks[idx_]['time_sec'])}")
                                     time.sleep(0.8)
@@ -1438,6 +1538,7 @@ def run() -> int:
                     status_width = layout.get("width")
                     last_status_text = layout.get("status_text")
                 elif ch in (b"q", b"Q", b"\x1b"):
+                    _capture_pos_before_quit()
                     ipc.quit()
                     _quit_flag = True
 
@@ -1449,15 +1550,26 @@ def run() -> int:
                 pos_sec = ipc.get_property("time-pos")
                 pl_pos = ipc.get_property("playlist-pos")
                 pl_pos_0 = pl_pos
+            # After quit, IPC reads can return None; fall back to latest telemetry snapshot.
+            if pos_sec is None and last_telemetry:
+                pos_sec = last_telemetry.get("time_pos")
+            if pl_pos_0 is None and last_telemetry:
+                pl_pos_0 = last_telemetry.get("playlist_pos")
+            if (pos_sec is None or pos_sec <= 0.0) and _final_pos_override is not None:
+                pos_sec = _final_pos_override
             save_session(url, title, is_playlist, pl_pos_0, pos_sec)
             log.info("session saved: pos=%.1fs playlist_pos=%s", pos_sec or 0, pl_pos_0)
 
-        # Progress finalization — force-write final outcome, bypassing min-delta guard
+        # Progress finalization â€” force-write final outcome, bypassing min-delta guard
         if _media_continue_enabled and _continue_key and url:
             _final_pos = pos_sec if pos_sec is not None else 0.0
             _final_dur = last_telemetry.get("duration") if last_telemetry else None
             if _final_dur is None and ipc_connected:
                 _final_dur = ipc.get_property("duration")
+            _final_dur_eff, _final_dur_source, _final_dur_confident = _resolve_duration_for_progress(
+                _final_pos,
+                _final_dur,
+            )
             _outcome, _written = write_checkpoint(
                 continue_key=_continue_key,
                 provider=provider.name().lower() if provider else "",
@@ -1468,7 +1580,9 @@ def run() -> int:
                 episode_url=_continue_meta.get("episode_url", url or ""),
                 episode_index=_continue_meta.get("episode_index"),
                 position_sec=_final_pos,
-                duration_sec=_final_dur,
+                duration_sec=_final_dur_eff,
+                duration_source=_final_dur_source,
+                estimated_confident=_final_dur_confident,
                 completion_threshold_pct=_completion_threshold_pct,
                 max_items=_max_continue,
                 force=True,
@@ -1476,14 +1590,14 @@ def run() -> int:
             )
             if _written:
                 log.info("progress finalized: key=%s outcome=%s", _continue_key, _outcome)
-                _final_pct = (_final_pos / _final_dur * 100) if _final_dur else 0.0
+                _final_pct = (_final_pos / _final_dur_eff * 100) if _final_dur_eff else 0.0
                 _history_add_entry(
                     provider=provider.name().lower() if provider else "",
                     title=title,
                     url=url,
                     continue_key=_continue_key,
                     playback_outcome=_outcome,
-                    duration_sec=_final_dur,
+                    duration_sec=_final_dur_eff,
                     progress_pct=_final_pct,
                 )
 
@@ -1492,7 +1606,7 @@ def run() -> int:
         rc = proc.poll()
         if rc is not None and rc != 0:
             log.warning("mpv exited with code %d", rc)
-            print(f"[youtube] mpv exited with code {rc} — check runtime/mpv.log")
+            print(f"[youtube] mpv exited with code {rc} â€” check runtime/mpv.log")
             # Dump last 40 lines of mpv.log (--log-file output) into the session log
             try:
                 with open(_mpv_log_path, "r", encoding="utf-8", errors="replace") as _f:
@@ -1507,7 +1621,7 @@ def run() -> int:
             log.info("mpv exited cleanly rc=%s", rc)
 
     except Exception:
-        log.exception("unhandled exception in run() — mpv will be terminated")
+        log.exception("unhandled exception in run() â€” mpv will be terminated")
         raise
 
     finally:
@@ -1531,16 +1645,16 @@ def run() -> int:
     _launch_script = os.path.join(_PROJECT_ROOT, "launch_youtube.py")
     if not _quit_flag:
         if _hianime_skip_to_next and _ep_has_next and _ep_next_url:
-            # User pressed N — launch next episode immediately, no countdown.
+            # User pressed N â€” launch next episode immediately, no countdown.
             log.info("autoplay: manual next -> %s", _ep_next_url)
             subprocess.run([sys.executable, _launch_script, "--url", _ep_next_url])
         elif _hianime_skip_to_prev and _ep_has_prev and _ep_prev_url:
-            # User pressed P — launch previous episode immediately, no countdown.
+            # User pressed P â€” launch previous episode immediately, no countdown.
             log.info("autoplay: manual prev -> %s", _ep_prev_url)
             subprocess.run([sys.executable, _launch_script, "--url", _ep_prev_url])
         elif _ep_has_next and _ep_next_url and rc == 0 and _mpv_exited_at_eof(_mpv_log_path):
-            # Natural EOF — show countdown before advancing.
-            log.info("autoplay: eof eligible — next=%s", _ep_next_url)
+            # Natural EOF â€” show countdown before advancing.
+            log.info("autoplay: eof eligible â€” next=%s", _ep_next_url)
             _play_next = _autoplay_countdown(_ep_next_url, _ep_next_title)
             if _play_next:
                 log.info("autoplay: eof launching %s", _play_next)
@@ -1548,4 +1662,5 @@ def run() -> int:
 
     print("[youtube] Done.")
     return 0
+
 

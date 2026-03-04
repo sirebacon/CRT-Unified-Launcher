@@ -59,6 +59,7 @@ def upsert_progress(
     episode_index: Optional[int] = None,
     resume_position_sec: float = 0.0,
     duration_sec: Optional[float] = None,
+    duration_source: str = "actual",
     playback_outcome: str = OUTCOME_IN_PROGRESS,
     min_delta_sec: float = 5.0,
     max_items: int = 20,
@@ -92,6 +93,7 @@ def upsert_progress(
         "target_url": target_url,
         "resume_position_sec": round(resume_position_sec, 1),
         "duration_sec": round(duration_sec, 1) if duration_sec is not None else None,
+        "duration_source": duration_source,
         "progress_pct": progress_pct,
         "episode_url": episode_url,
         "episode_index": episode_index,
@@ -165,36 +167,44 @@ def write_checkpoint(
     episode_index: Optional[int],
     position_sec: float,
     duration_sec: Optional[float],
+    duration_source: str = "actual",
+    estimated_confident: bool = False,
     completion_threshold_pct: float = 92.0,
     max_items: int = 20,
     force: bool = False,
     min_position_sec: float = 30.0,
     skip_signal: bool = False,
 ) -> tuple[str, bool]:
-    """Apply safety guards, classify outcome, write a progress entry.
+    """Apply safety guards, classify outcome, and write a progress entry.
 
     Guards (Phase 6.4):
-    - Returns (OUTCOME_IN_PROGRESS, False) if duration_sec is None/0.
-    - Clamps position_sec to max(0, duration_sec - 10).
-    - Returns (outcome, False) if in_progress and position < min_position_sec.
+    - If duration is known, clamp position_sec to max(0, duration - 10).
+    - If duration is unknown, still allow in-progress/skipped writes so Continue
+      Watching works for streams that do not expose duration over IPC.
+    - Return (outcome, False) if in_progress and position < min_position_sec.
 
-    force=True  → bypass min_delta guard (min_delta_sec=0 passed to upsert_progress).
-    skip_signal → if True and pct < threshold, outcome = OUTCOME_SKIPPED.
-
-    Returns (outcome_str, written_bool).
+    force=True  -> bypass min-delta guard (min_delta_sec=0 passed to upsert_progress).
+    skip_signal -> when True and below threshold, classify as OUTCOME_SKIPPED.
+    duration_source / estimated_confident:
+      - If source is estimated and confidence is low, do not auto-mark completed.
     """
-    if not duration_sec:
-        return OUTCOME_IN_PROGRESS, False
+    position_sec = max(0.0, float(position_sec or 0.0))
 
-    position_sec = max(0.0, min(position_sec, duration_sec - 10))
-    pct = (position_sec / duration_sec) * 100
-
-    if skip_signal and pct < completion_threshold_pct:
-        outcome = OUTCOME_SKIPPED
-    elif pct >= completion_threshold_pct:
-        outcome = OUTCOME_COMPLETED
+    if duration_sec and duration_sec > 0:
+        position_sec = min(position_sec, max(0.0, duration_sec - 10))
+        pct = (position_sec / duration_sec) * 100
+        if skip_signal and pct < completion_threshold_pct:
+            outcome = OUTCOME_SKIPPED
+        elif pct >= completion_threshold_pct:
+            if duration_source == "actual" or estimated_confident:
+                outcome = OUTCOME_COMPLETED
+            else:
+                outcome = OUTCOME_IN_PROGRESS
+        else:
+            outcome = OUTCOME_IN_PROGRESS
     else:
-        outcome = OUTCOME_IN_PROGRESS
+        # Unknown duration: persist resume state, but do not auto-complete.
+        outcome = OUTCOME_SKIPPED if skip_signal else OUTCOME_IN_PROGRESS
 
     if outcome == OUTCOME_IN_PROGRESS and position_sec < min_position_sec:
         return outcome, False
@@ -210,6 +220,7 @@ def write_checkpoint(
         episode_index=episode_index,
         resume_position_sec=position_sec,
         duration_sec=duration_sec,
+        duration_source=duration_source,
         playback_outcome=outcome,
         max_items=max_items,
         min_delta_sec=0 if force else 5.0,

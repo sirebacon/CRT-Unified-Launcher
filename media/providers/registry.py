@@ -27,6 +27,9 @@ def setup(config: dict) -> None:
     node_path = config.get("node_path", "node")
     cookies_from_browser = config.get("youtube_cookies_from_browser", "")
     cookies_file = config.get("youtube_cookies_file", "")
+    hianime_prompt_stream_choice = bool(config.get("hianime_prompt_stream_choice", True))
+    hianime_default_stream_type = str(config.get("hianime_default_stream_type", "sub")).strip().lower()
+    hianime_default_server = str(config.get("hianime_default_server", "")).strip().lower()
 
     # Tier 1 — yt-dlp-backed
     from media.providers.youtube import YouTubeProvider
@@ -47,7 +50,12 @@ def setup(config: dict) -> None:
     # Tier 2 — resolver-backed
     try:
         from media.providers.aniwatch import AniwatchProvider
-        register(AniwatchProvider(node_path=node_path))
+        register(AniwatchProvider(
+            node_path=node_path,
+            prompt_stream_choice=hianime_prompt_stream_choice,
+            default_stream_type=hianime_default_stream_type,
+            default_server=hianime_default_server,
+        ))
         log.debug("AniwatchProvider registered")
     except Exception as e:
         log.warning("AniwatchProvider could not be registered: %s", e)

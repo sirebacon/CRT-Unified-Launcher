@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import subprocess
+import sys
 from typing import Optional
 from urllib.parse import urlparse, parse_qs
 
@@ -42,11 +43,21 @@ class AniwatchProvider(Provider):
         node_path: str = "node",
         resolver_path: str = _DEFAULT_RESOLVER,
         timeout: int = _DEFAULT_TIMEOUT,
+        prompt_stream_choice: bool = False,
+        default_stream_type: str = "sub",
+        default_server: str = "",
     ):
         self._node_path = node_path
         self._resolver_path = resolver_path
         self._timeout = timeout
-        self._cache: dict = {}  # url -> resolver result; avoids double-fetching per session
+        self._prompt_stream_choice = bool(prompt_stream_choice)
+        self._default_stream_type = (default_stream_type or "sub").lower()
+        self._default_server = (default_server or "").strip().lower()
+        # Sticky stream selection for the current launcher session.
+        self._session_stream_type = ""
+        self._session_server = ""
+        # Cache keyed by (url, stream_type, server)
+        self._cache: dict = {}
 
     def name(self) -> str:
         return "HiAnime"
@@ -80,7 +91,7 @@ class AniwatchProvider(Provider):
             return f"Invalid URL: {e}"
 
     def resolve_target(self, url: str, quality: str = "best") -> dict:
-        data = self._run_resolver(url)
+        data = self._resolve_with_optional_choice(url)
         return {
             "target_url": data["target_url"],
             "is_playlist": data.get("is_playlist", False),
@@ -99,8 +110,9 @@ class AniwatchProvider(Provider):
 
     def fetch_title(self, url: str) -> str:
         try:
-            data = self._run_resolver(url)
-            return data.get("episode_title", "")
+            # Do not require full source resolution just to get title.
+            data = self._run_resolver_with_options(url, list_only=True)
+            return data.get("episode_title", "") or ""
         except Exception as e:
             log.warning("fetch_title failed: %s", e)
             return ""
@@ -119,8 +131,14 @@ class AniwatchProvider(Provider):
             episode_id = (qs.get("ep", [""]))[0]
             # episode_index from resolver cache if available
             episode_index = None
-            if url in self._cache:
-                episode_index = self._cache[url].get("current_index")
+            for key, payload in self._cache.items():
+                if not isinstance(key, tuple) or len(key) < 1:
+                    continue
+                if key[0] == url and isinstance(payload, dict):
+                    idx = payload.get("current_index")
+                    if idx is not None:
+                        episode_index = idx
+                        break
             return {
                 "continue_key":  f"hianime:series:{series_slug}",
                 "entity_type":   "series",
@@ -152,18 +170,108 @@ class AniwatchProvider(Provider):
             return False
 
     def _run_resolver(self, url: str) -> dict:
-        if url in self._cache:
-            log.debug("resolver cache hit: %s", url)
-            return self._cache[url]
+        return self._run_resolver_with_options(url, stream_type="", server_name="", list_only=False)
+
+    def _resolve_with_optional_choice(self, url: str) -> dict:
+        """Resolve URL, optionally prompting user to choose sub/dub + server."""
+        stream_type = self._session_stream_type or (
+            self._default_stream_type if self._default_stream_type in {"sub", "dub"} else "sub"
+        )
+        server_name = self._session_server or self._default_server
+
+        # Prompt only before first explicit choice in this launcher session.
+        if self._prompt_stream_choice and sys.stdin.isatty() and not self._session_stream_type:
+            try:
+                choices = self._run_resolver_with_options(url, list_only=True)
+                stream_type, server_name = self._prompt_stream_selection(choices)
+                self._session_stream_type = stream_type
+                self._session_server = server_name
+            except Exception as e:
+                log.warning("stream choice listing failed; using defaults: %s", e)
+        else:
+            # Keep session choice sticky across next/prev/autoplay episode transitions.
+            if stream_type in {"sub", "dub"}:
+                self._session_stream_type = stream_type
+            if server_name:
+                self._session_server = server_name
+
+        return self._run_resolver_with_options(
+            url,
+            stream_type=stream_type,
+            server_name=server_name,
+            list_only=False,
+        )
+
+    def _prompt_stream_selection(self, choices: dict) -> tuple[str, str]:
+        available = choices.get("available", {}) if isinstance(choices, dict) else {}
+        sub_servers = list(available.get("sub", []) or [])
+        dub_servers = list(available.get("dub", []) or [])
+        default_type = choices.get("default_type", "sub")
+        default_server = choices.get("default_server", "")
+
+        # If only one practical choice, don't prompt.
+        total_variants = (1 if sub_servers else 0) + (1 if dub_servers else 0)
+        if total_variants <= 1:
+            st = "sub" if sub_servers else "dub"
+            ss = (sub_servers[0] if sub_servers else (dub_servers[0] if dub_servers else ""))
+            return st, ss
+
+        print("\n[hianime] Stream choices:")
+        idx = 1
+        options: list[tuple[str, str]] = []
+        for stype, servers in (("sub", sub_servers), ("dub", dub_servers)):
+            for s in servers:
+                marker = " (default)" if stype == default_type and s == default_server else ""
+                print(f"  {idx}) {stype.upper()} / {s}{marker}")
+                options.append((stype, s))
+                idx += 1
+        print("Pick stream (Enter for default): ", end="", flush=True)
+        try:
+            pick = input().strip()
+        except (EOFError, KeyboardInterrupt):
+            pick = ""
+
+        if pick.isdigit():
+            i = int(pick) - 1
+            if 0 <= i < len(options):
+                return options[i]
+
+        if default_type in {"sub", "dub"} and default_server:
+            return default_type, default_server
+        return options[0] if options else ("sub", "")
+
+    def _run_resolver_with_options(
+        self,
+        url: str,
+        stream_type: str = "",
+        server_name: str = "",
+        list_only: bool = False,
+    ) -> dict:
+        cache_key = (url, stream_type or "", server_name or "", bool(list_only))
+        if cache_key in self._cache:
+            log.debug("resolver cache hit: %s", cache_key)
+            return self._cache[cache_key]
 
         if not os.path.exists(self._resolver_path):
             raise RuntimeError(f"Resolver script not found: {self._resolver_path}")
 
-        log.debug("running resolver: %s %s", self._resolver_path, url)
+        log.debug(
+            "running resolver: %s url=%s list=%s type=%s server=%s",
+            self._resolver_path, url, list_only, stream_type, server_name
+        )
+
+        cmd = [self._node_path, self._resolver_path]
+        if list_only:
+            cmd.append("--list")
+        if stream_type:
+            cmd.extend(["--type", stream_type])
+        if server_name:
+            cmd.extend(["--server", server_name])
+        cmd.append(url)
 
         try:
             result = subprocess.run(
-                [self._node_path, self._resolver_path, url],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=self._timeout,
@@ -199,5 +307,5 @@ class AniwatchProvider(Provider):
         except json.JSONDecodeError as e:
             raise RuntimeError(f"HiAnime resolver returned invalid JSON: {e}")
 
-        self._cache[url] = data
+        self._cache[cache_key] = data
         return data
