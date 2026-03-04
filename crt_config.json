@@ -6,10 +6,61 @@
   "youtube_rect_guard_interval_sec": 5.0,
   "youtube_audio_device": "",
   "youtube_quality_presets": {
-    "best":  {},
-    "720p":  {"ytdl_format": "bestvideo[height<=720]+bestaudio/best[height<=720]"},
-    "480p":  {"ytdl_format": "bestvideo[height<=480]+bestaudio/best[height<=480]"},
-    "audio": {"ytdl_format": "bestaudio"}
+    "best": {},
+    "720p": {
+      "ytdl_format": "bestvideo[height<=720]+bestaudio/best[height<=720]"
+    },
+    "480p": {
+      "ytdl_format": "bestvideo[height<=480]+bestaudio/best[height<=480]"
+    },
+    "audio": {
+      "ytdl_format": "bestaudio"
+    }
+  },
+  "browser_playback": {
+    "default_mode": "browser",
+    "browser_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "browser_rect": null,
+    "isolated_profile_dir": "runtime/browser_isolated",
+    "isolated_profile_mode": "persistent",
+    "window_find_timeout_sec": 15,
+    "playwright_timeout_sec": 30,
+    "playwright_headless": false,
+    "playwright_use_system_chrome": true,
+    "profiles": {
+      "kisscartoon": {
+        "title_match": [
+          "KissCartoon"
+        ],
+        "mode_override": "browser",
+        "reanchor_hotkey": "ctrl+alt+m",
+        "browser_args": [],
+        "playwright_extensions": [
+          "ddkjiahejlhfcafbddmgiahcphecmpfh"
+        ],
+        "local_extensions": [
+          "media/browser_ext/crt_fullscreen"
+        ],
+        "window_presets": [
+          {
+            "label": "Adjusted (inset 20px)",
+            "x": -1260,
+            "y": 20,
+            "w": 1240,
+            "h": 920
+          }
+        ],
+        "playwright_wait_until": "domcontentloaded",
+        "playwright_fullscreen_js": true,
+        "keymap": {
+          "toggle_pause": "Space",
+          "seek_back": "ArrowLeft",
+          "seek_forward": "ArrowRight",
+          "fullscreen": "f",
+          "mute": "m"
+        }
+      }
+    }
   },
   "retroarch": {
     "_note": "rect (x/y/w/h) is read from profiles/retroarch-session.json \u2014 edit there",
@@ -18,12 +69,25 @@
     "launchbox_config": "D:\\Emulators\\RetroArch-Win64\\retroarch_crt.cfg"
   },
   "plex": {
-    "x": -1883,
-    "y": 130,
-    "w": 1720,
-    "h": 1184,
     "path": "C:\\Program Files\\Plex\\Plex\\Plex.exe",
-    "dir": "C:\\Program Files\\Plex\\Plex"
+    "dir": "C:\\Program Files\\Plex\\Plex",
+    "preset_toggle_hotkey": "ctrl+alt+p",
+    "presets": {
+      "default": {
+        "label": "Default",
+        "x": -1883,
+        "y": 130,
+        "w": 1720,
+        "h": 1184
+      },
+      "alt": {
+        "label": "Alt",
+        "x": -2078,
+        "y": 135,
+        "w": 2070,
+        "h": 1179
+      }
+    }
   },
   "ppsspp": {
     "path": "D:\\Emulators\\PPSSPPWindowsGold\\PPSSPPWindows64.exe",

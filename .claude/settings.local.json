@@ -18,7 +18,8 @@
       "Bash(\"D:/Emulators/yt-dlp/yt-dlp_x86.exe\":*)",
       "Bash(node:*)",
       "Bash(py:*)",
-      "Bash(yt-dlp:*)"
+      "Bash(yt-dlp:*)",
+      "WebSearch"
     ]
   }
 }

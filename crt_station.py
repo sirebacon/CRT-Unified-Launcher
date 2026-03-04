@@ -106,9 +106,10 @@ def run_gaming_session() -> None:
 
 
 def run_plex_mode() -> None:
+    preset = "default"
     stop_plex_lockers()
 
-    plex_proc = subprocess.Popen([sys.executable, "launch_plex.py"])
+    plex_proc = subprocess.Popen([sys.executable, "launch_plex.py", "--preset", preset])
     try:
         plex_proc.wait()
     except KeyboardInterrupt:

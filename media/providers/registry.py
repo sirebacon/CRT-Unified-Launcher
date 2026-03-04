@@ -52,6 +52,14 @@ def setup(config: dict) -> None:
     except Exception as e:
         log.warning("AniwatchProvider could not be registered: %s", e)
 
+    # Tier 3 — browser-backed
+    try:
+        from media.providers.kisscartoon import KissCartoonProvider
+        register(KissCartoonProvider())
+        log.debug("KissCartoonProvider registered")
+    except Exception as e:
+        log.warning("KissCartoonProvider could not be registered: %s", e)
+
     # Fallback — registered last, matches anything
     from media.providers.generic import GenericProvider
     register(GenericProvider())

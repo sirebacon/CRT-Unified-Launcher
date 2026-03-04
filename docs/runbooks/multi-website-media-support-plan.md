@@ -10,8 +10,8 @@ Make the current YouTube-on-CRT flow reusable for other websites without duplica
 
 ## Supported Site Categories
 
-Two provider types are supported. They share the same MediaSession, window/snap behavior,
-IPC loop, and telemetry - but differ in how mpv receives the stream URL.
+Three provider tiers are supported. They share the same MediaSession, window/snap behavior,
+IPC loop, and telemetry, but differ in how playback is executed.
 
 ### Tier 1 - yt-dlp-backed providers
 Examples: YouTube, Vimeo, Bilibili, Dailymotion, Twitter/X clips, Reddit videos, TikTok.
@@ -48,6 +48,26 @@ mpv/ffmpeg-side CDN 404 behavior observed on direct WCO CDN playback.
 
 The `uses_ytdl: bool` capability flag distinguishes the two tiers. MediaSession includes
 `--script-opts=ytdl_hook-ytdl_path=yt-dlp.exe` only when `uses_ytdl` is `True`.
+
+### Tier 3 - browser-backed providers
+Examples: KissCartoon and similar sites where playback works in browser media-element path
+but is blocked/unreliable for direct mpv/Python HTTP ingestion.
+
+Invocation model:
+```text
+launcher -> browser adapter (system browser or Playwright mode)
+```
+
+Tier 3 providers return a browser launch directive from `resolve_target()`:
+- `requires_mpv=False`
+- `launch_mode` (`browser` or `playwright`)
+- `browser_profile` (site-specific behavior profile)
+
+Reference design docs:
+- `docs/runbooks/browser-playback-index.md`
+- `docs/runbooks/browser-playback-core.md`
+- `docs/runbooks/browser-playback-mode-a-system-browser.md`
+- `docs/runbooks/browser-playback-mode-b-playwright.md`
 
 ### Out of Scope (current plan)
 - **Live streams:** mpv will play them if a live URL is pasted, but session-save,
@@ -151,6 +171,9 @@ Each site implements the same contract:
   "prev_episode_url": str,        # optional; episode navigation target
   "next_episode_title": str,      # optional; episode navigation label
   "prev_episode_title": str,      # optional; episode navigation label
+  "requires_mpv": bool,           # optional; False for browser-backed providers
+  "launch_mode": str,             # optional; "browser" | "playwright" (Tier 3)
+  "browser_profile": str,         # optional; profile id for browser-mode behavior
 }
 ```
 
@@ -316,6 +339,13 @@ Acceptance:
 - No broken or non-functional controls shown for any provider or mode.
 - Degrading to write-only IPC mode suppresses resume/bookmark controls cleanly.
 
+### Phase 3b: Browser-Backed Provider Tier (Design)
+- Add browser launch directive support in provider contract (`requires_mpv`, `launch_mode`,
+  `browser_profile`).
+- Add browser adapter layer with Mode A (system browser + re-anchor) and Mode B
+  (Playwright + NOW PLAYING control bridge).
+- Keep browser behavior profile-driven to onboard multiple sites without mode code forks.
+
 ## Risk Areas
 - IPC differences are not provider-specific; avoid per-provider IPC forks.
 - Playlist semantics vary by site; normalize with provider capability flags rather than
@@ -339,6 +369,10 @@ Acceptance:
 - **Node.js availability:** The resolver requires Node.js on PATH. If Node is missing, the
   AniwatchProvider should fail when selected for a matching URL (before playback launch),
   with a clear error, without impacting unrelated providers.
+- **Tier 3 lifecycle complexity:** Browser-backed modes require explicit launcher lifecycle
+  handling (fire-and-forget + re-anchor for Mode A; active key bridge loop for Mode B).
+- **Playwright frame targeting:** Fullscreen and key controls may require iframe/frame
+  context targeting rather than outer-page document calls.
 
 ## Future Scope (not current priority)
 
@@ -374,9 +408,10 @@ architecture - each is a new provider file and a registry entry.
 - **DRM content** — Netflix, Disney+, Amazon Prime; Widevine not supported in mpv
 
 ## Non-Goals (for this plan)
+Exception: browser automation for protected non-DRM media-element-only access (Tier 3) is in scope.
 - Live streams - mpv will play them if a live URL is pasted, but session-save, bookmarks,
   and resume are not guaranteed to behave correctly. No special handling planned.
-- Full browser automation for DRM/unsupported streams.
+- Full browser automation for DRM content.
 - Site-specific scraping in core modules.
 - Replacing mpv with a different player.
 
@@ -415,7 +450,11 @@ architecture - each is a new provider file and a registry entry.
   - new provider file in `media/providers/`
   - one registry entry
   - optional provider config section in `crt_config.json`
-- MediaSession is unchanged when onboarding either type of provider.
+- Adding a new **Tier 3** provider requires only:
+  - new provider file in `media/providers/`
+  - one registry entry
+  - site profile entry under `browser_playback.profiles.<site>`
+- MediaSession is unchanged when onboarding providers across all tiers.
 - Existing YouTube behavior remains stable.
 - A "how to add a provider" runbook exists covering:
   - one working Tier 1 example (YouTube or Vimeo) with quality presets, cookie config,
@@ -446,6 +485,14 @@ architecture - each is a new provider file and a registry entry.
 
 ### Remaining / Not Yet Started
 
-- [ ] `media/core/` — generic modules (`adjust`, `controls`, `player`, `telemetry`, `state`, `queue`) not yet moved from `youtube/`; `youtube/` is still the live implementation, not a shim
-- [ ] Phase 3 capability enforcement — controls not hidden based on provider flags yet
+- [ ] `media/core/` - generic modules (`adjust`, `controls`, `player`, `telemetry`, `state`, `queue`) not yet moved from `youtube/`; `youtube/` is still the live implementation, not a shim
+- [ ] Phase 3 capability enforcement - controls not hidden based on provider flags yet
+- [ ] Phase 3b browser-backed provider tier (design exists, implementation pending)
+- [ ] Browser adapter layer (`media/browser_launcher.py`) and first browser-backed provider
+- [ ] Browser profile config section (`browser_playback.*`) wiring
+- [ ] Browser playback modular runbooks (design only):
+  - `docs/runbooks/browser-playback-index.md`
+  - `docs/runbooks/browser-playback-core.md`
+  - `docs/runbooks/browser-playback-mode-a-system-browser.md`
+  - `docs/runbooks/browser-playback-mode-b-playwright.md`
 - [ ] "How to add a provider" runbook

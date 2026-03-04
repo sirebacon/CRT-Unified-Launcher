@@ -77,6 +77,7 @@ def load_config() -> dict:
         ),
         "youtube_cookies_from_browser": cfg.get("youtube_cookies_from_browser", ""),
         "youtube_cookies_file": cfg.get("youtube_cookies_file", ""),
+        "browser_playback": cfg.get("browser_playback", {}),
     }
 
 

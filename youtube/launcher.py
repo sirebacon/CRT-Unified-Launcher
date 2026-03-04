@@ -15,6 +15,7 @@ sys.path.insert(0, _PROJECT_ROOT)
 from session.mpv_ipc import MpvIpc
 from session.window_utils import find_window, get_rect, move_window, get_window_title
 from session.audio import get_current_audio_device_name, set_default_audio_best_effort
+from media.browser_launcher import launch_system_browser, launch_playwright_browser
 
 from youtube.config import (
     _MPV_PROFILE_PATH,
@@ -57,15 +58,19 @@ from youtube.telemetry import TelemetryEngine
 def _setup_log() -> logging.Logger:
     log_path = os.path.join(_PROJECT_ROOT, "runtime", "youtube.log")
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    fmt = logging.Formatter(
+        "%(asctime)s %(levelname)-7s %(name)s %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+    fh.setFormatter(fmt)
+    # Attach to root so media.*, session.*, and youtube.* all write to the same file
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    if not any(isinstance(h, logging.FileHandler) for h in root.handlers):
+        root.addHandler(fh)
     log = logging.getLogger("youtube")
     log.setLevel(logging.DEBUG)
-    if not log.handlers:
-        fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
-        fh.setFormatter(logging.Formatter(
-            "%(asctime)s %(levelname)-7s %(message)s",
-            datefmt="%H:%M:%S",
-        ))
-        log.addHandler(fh)
     return log
 
 
@@ -417,6 +422,8 @@ def run() -> int:
                         help="Load queue from text/JSON file")
     parser.add_argument("--add-to-queue", metavar="URL",
                         help="Append URL to runtime/youtube_queue.json and exit")
+    parser.add_argument("--browser-dry-run", action="store_true",
+                        help="Show what browser launch would do without opening anything")
     args = parser.parse_args()
     log.info("=== launcher started args=%s", vars(args))
 
@@ -572,6 +579,35 @@ def run() -> int:
             "provider=%s resolved target=%s is_playlist=%s",
             provider.name(), target_url, is_playlist,
         )
+
+    # Tier 3: browser-backed provider — skip mpv entirely
+    if not resolved.get("requires_mpv", True):
+        profile_id = resolved.get("browser_profile", "")
+        provider_mode = resolved.get("launch_mode", "browser")
+        # Mode precedence: profile mode_override > provider launch_mode > default_mode
+        bp_profiles = cfg.get("browser_playback", {}).get("profiles", {})
+        mode_override = bp_profiles.get(profile_id, {}).get("mode_override", "")
+        if mode_override:
+            launch_mode = mode_override
+        else:
+            launch_mode = provider_mode or cfg.get("browser_playback", {}).get("default_mode", "browser")
+        log.info("Tier 3 browser launch: mode=%s profile=%s url=%s",
+                 launch_mode, profile_id, url)
+        _prev_audio: Optional[str] = None
+        if audio_device_token:
+            _prev_audio = get_current_audio_device_name()
+            set_default_audio_best_effort(audio_device_token)
+        try:
+            if launch_mode == "playwright":
+                rc = launch_playwright_browser(url, cfg, profile_id,
+                                               dry_run=args.browser_dry_run)
+            else:
+                rc = launch_system_browser(url, cfg, profile_id,
+                                           dry_run=args.browser_dry_run)
+        finally:
+            if _prev_audio:
+                set_default_audio_best_effort(_prev_audio)
+        return rc
 
     # Episode nav flags (only populated for HiAnime; False/empty for everything else)
     _ep_has_next = bool(resolved.get("has_next", False))

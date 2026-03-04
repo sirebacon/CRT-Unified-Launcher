@@ -1,0 +1,29 @@
+/* CRT Fullscreen Fix — CSS only, no JS
+   Targets both native browser fullscreen and JWPlayer's CSS-class fullscreen.
+   all_frames:true ensures this applies inside the embed iframe. */
+
+/* Native browser fullscreen (requestFullscreen API) */
+:-webkit-full-screen video,
+:fullscreen video {
+    object-fit: contain !important;
+    background: #000 !important;
+    width: 100% !important;
+    height: 100% !important;
+    transform: none !important;
+}
+
+/* JWPlayer CSS fullscreen (.jw-flag-fullscreen on player container) */
+.jw-flag-fullscreen .jw-video,
+.jw-flag-fullscreen video {
+    object-fit: contain !important;
+    background: #000 !important;
+    transform: none !important;
+}
+
+/* VideoJS fallback (.vjs-fullscreen on player container) */
+.vjs-fullscreen .vjs-tech,
+.vjs-fullscreen video {
+    object-fit: contain !important;
+    background: #000 !important;
+    transform: none !important;
+}
