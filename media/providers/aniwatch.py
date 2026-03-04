@@ -79,7 +79,7 @@ class AniwatchProvider(Provider):
         except Exception as e:
             return f"Invalid URL: {e}"
 
-    def resolve_target(self, url: str) -> dict:
+    def resolve_target(self, url: str, quality: str = "best") -> dict:
         data = self._run_resolver(url)
         return {
             "target_url": data["target_url"],

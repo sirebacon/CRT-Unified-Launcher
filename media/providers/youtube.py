@@ -76,7 +76,7 @@ class YouTubeProvider(Provider):
         except Exception:
             return "list=" in url
 
-    def resolve_target(self, url: str) -> dict:
+    def resolve_target(self, url: str, quality: str = "best") -> dict:
         playlist = self.is_playlist(url)
         return {
             "target_url": url,
