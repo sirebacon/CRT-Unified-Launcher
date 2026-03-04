@@ -95,19 +95,44 @@ to mpv via mpv's JSON IPC named pipe (`--input-ipc-server`).
 [← →]     Seek -10s / +10s
 [↑ ↓]     Volume +5 / -5
 [M]       Mute
-[N]       Next video in playlist  (playlist URLs only)
-[P]       Previous video in playlist  (playlist URLs only)
-[Z]       Cycle zoom presets (Off â†’ default â†’ ...)
+[N]       Next video / next HiAnime episode
+[P]       Previous video / prev HiAnime episode
+[Z]       Cycle zoom presets (Off → default → ...)
 [A]       Enter Adjust mode
 [+]       Add current URL to favorites
 [L]       Browse favorites menu
-[H]       Recent history menu
+[H]       Watch history screen (filter Y/I/A; R<N> remove; C clear)
+[K]       Mark current item as completed (drops from Continue lane immediately)
 [B]       Save bookmark at current timestamp
 [J]       Jump to a saved bookmark
 [Q]       Quit
 ```
 
 Controls auto-hide after 5 seconds of inactivity. Press any key to restore.
+
+### Startup — Continue Watching lane
+
+If any in-progress items exist, a **Continue Watching** lane is shown before the URL prompt.
+When the lane is empty, the launcher goes straight to the URL prompt with no extra keypress.
+
+```
+Continue Watching:
+  1) Super Demon Hero Wataru  [Episode 3 - ...]  → Ep 4  57%  2026-03-04
+  2) Cool YouTube Video                                   40%  2026-03-03
+
+  1-N play  R<N> remove  K<N> mark done  B<N> bookmark  U<N> up-next  H history  A activity  Enter URL prompt
+```
+
+| Key | Action |
+|-----|--------|
+| `1`–`N` | Play item at saved position; shows bookmark choice prompt if bookmarks exist |
+| `R<N>` | Remove item from Continue lane |
+| `K<N>` | Mark item completed — drops from lane, stays in history |
+| `B<N>` | Bookmark picker — list bookmarks for item N, pick one to play from that time |
+| `U<N>` | Up Next — play the next HiAnime episode from the beginning (HiAnime only) |
+| `H` | Watch History screen |
+| `A` | Recent Activity screen — merged in-progress + history sorted by recency |
+| Enter | Skip to URL prompt |
 
 ### Adjust mode keys (press A to enter, A to exit)
 
@@ -181,27 +206,36 @@ URL), autoplay is enabled automatically:
 | File | Purpose |
 |------|---------|
 | `launch_youtube.py` | Thin entrypoint — delegates to `youtube/launcher.py` |
-| `youtube/launcher.py` | Main orchestration loop (URL prompt, mpv launch, key handling) |
+| `youtube/launcher.py` | Main orchestration loop (URL prompt, mpv launch, key handling, Continue Watching integration) |
+| `youtube/continue_ui.py` | Continue lane, Watch History screen, Recent Activity screen |
+| `youtube/progress.py` | Continue Watching progress persistence (`media_progress.json`) |
+| `youtube/media_history.py` | Unified cross-provider watch history (`media_history.json`) |
 | `youtube/config.py` | Config loading, URL validation, quality presets, clipboard paste |
 | `youtube/player.py` | Monitor/window helpers, preset rect, IPC fill, region picker |
 | `youtube/controls.py` | Terminal display: Now Playing, Adjust mode, status lines |
 | `youtube/adjust.py` | Adjust-mode key handler (extracted from main loop) |
 | `youtube/state.py` | Session, favorites, history, bookmarks (JSON-backed) |
 | `youtube/queue.py` | Queue file loading/saving |
+| `media/providers/base.py` | Provider base class; `get_continue_metadata()` stub |
+| `media/providers/youtube.py` | YouTube provider; `get_continue_metadata()` implementation |
+| `media/providers/aniwatch.py` | HiAnime provider; `get_continue_metadata()` implementation |
 | `session/mpv_ipc.py` | Named pipe IPC client — commands + `get_property` + `seek_absolute` |
 | `session/audio.py` | Audio helpers; `get_current_audio_device_name` added |
 | `session/_region_picker.py` | Subprocess tkinter overlay for content-area drag selection |
 | `session/window_utils.py` | Shared Win32 helpers |
+| `tools/media.py` | `crt_tools.py media progress/history` diagnostic commands |
 | `profiles/mpv-session.json` | Window profile; managed by preset system |
 | `crt_station.py` | `[CINEMA] Launch YouTube` menu option |
 | `crt_presets.json` | `mpv` rect in each preset's `emulator_rects` |
-| `crt_config.json` | `mpv_path`, `yt_dlp_path`, `youtube_audio_device`, `youtube_quality_presets` |
+| `crt_config.json` | `mpv_path`, `yt_dlp_path`, `youtube_audio_device`, `youtube_quality_presets`, Continue Watching knobs |
 | `tools/preset.py` | `"mpv": "mpv-session.json"` in `_EMULATOR_PROFILE_FILES` |
 | `runtime/youtube_session.json` | Last session state (URL, position, playlist index) |
 | `runtime/youtube_favorites.json` | Saved favorites |
-| `runtime/youtube_history.json` | Playback history (capped at 200) |
+| `runtime/youtube_history.json` | Legacy playback history (read-only after migration) |
 | `runtime/youtube_bookmarks.json` | Per-URL timestamp bookmarks |
 | `runtime/youtube_queue.json` | Saved URL queue |
+| `runtime/media_progress.json` | Continue Watching progress entries (capped at 40) |
+| `runtime/media_history.json` | Unified cross-provider watch history (capped at 500) |
 
 ---
 
@@ -233,13 +267,44 @@ to resume from where you left off.
 
 - `[+]` adds the current URL/title to `runtime/youtube_favorites.json`.
 - `[L]` opens the favorites menu (numbered list; pick to see URL).
-- `[H]` shows the last 10 history entries.
-- History is automatically recorded on each launch; capped at 200 entries.
+- `[H]` during playback opens the Watch History screen (filter by provider; R<N> remove;
+  C clear; number to re-open URL).
+- Watch history is automatically recorded on each launch to `runtime/media_history.json`
+  (unified across YouTube and HiAnime); capped at 500 entries.
 
 ### Bookmarks
 
 - `[B]` saves a named timestamp for the current URL to `runtime/youtube_bookmarks.json`.
 - `[J]` shows the bookmark list; pick a number to seek to that position via IPC.
+- Bookmarks integrate with the Continue lane: selecting a Continue item that has bookmarks
+  prompts `1) Resume at saved position  2) Pick bookmark` before playback starts.
+- `B<N>` in the Continue lane opens the bookmark picker for item N directly.
+
+### Continue Watching
+
+Progress is tracked automatically during playback and on exit. Items appear in the Continue
+Watching lane at startup until marked complete or removed.
+
+- Progress checkpoints every 15 seconds (configurable: `media_progress_save_interval_sec`).
+- Items are marked `completed` when progress reaches the threshold (default 92%:
+  `media_completion_threshold_pct`). Completed items leave the Continue lane but stay in
+  Watch History.
+- HiAnime items that are skipped via N/P while below threshold are marked `skipped`.
+- `[K]` during playback marks the current item completed immediately without quitting.
+- `runtime/media_progress.json` stores up to 40 entries (20 in-progress + 20 done).
+
+Config knobs in `crt_config.json`:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `media_continue_enabled` | `true` | Toggle the entire system on/off |
+| `media_continue_max_items` | `20` | Max items in Continue lane |
+| `media_progress_save_interval_sec` | `15` | Checkpoint interval |
+| `media_completion_threshold_pct` | `92` | Percent to mark completed |
+
+Diagnostics: `python crt_tools.py media progress` / `python crt_tools.py media history`.
+
+See `docs/runbooks/media-history-continue-watching-plan.md` for full design notes.
 
 ## Non-Goals
 

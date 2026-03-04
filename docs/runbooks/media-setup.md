@@ -163,6 +163,39 @@ Wait a few seconds and retry, or restart the launcher.
 
 ---
 
+## Continue Watching
+
+Progress is tracked automatically during every YouTube and HiAnime session. No setup is
+required — it starts working on the first run.
+
+### Config knobs (`crt_config.json`)
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `media_continue_enabled` | `true` | Toggle the entire system. Set `false` to disable all progress tracking. |
+| `media_continue_max_items` | `20` | How many in-progress items to keep in the Continue lane. Oldest entries are pruned first. |
+| `media_progress_save_interval_sec` | `15` | How often (in seconds) to write a progress checkpoint during playback. |
+| `media_completion_threshold_pct` | `92` | Progress percent at which an item is marked `completed` and removed from the Continue lane. |
+
+### Runtime files
+
+| File | Description |
+|------|-------------|
+| `runtime/media_progress.json` | Continue Watching entries. Capped at `media_continue_max_items` in-progress + same count done. |
+| `runtime/media_history.json` | Unified watch history for YouTube and HiAnime. Capped at 500 entries. |
+
+### Diagnostics
+
+```bash
+python crt_tools.py media progress   # show all progress entries (in-progress + done)
+python crt_tools.py media history    # show stats by provider/outcome + recent 15 entries
+```
+
+See `docs/tools/media.md` for full command reference.
+See `docs/runbooks/media-history-continue-watching-plan.md` for design notes.
+
+---
+
 ## Log Files
 
 | File | When to read it |

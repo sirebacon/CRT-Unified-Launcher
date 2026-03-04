@@ -29,6 +29,9 @@ Track high-value follow-up features for `launch_youtube.py`.
 | 9) History + favorites | `[+]` `[L]` `[H]` keys; JSON in `runtime/` |
 | 10) Per-video bookmarks | `[B]` save, `[J]` jump; `runtime/youtube_bookmarks.json` |
 | 11) Auto-hide status | 5s inactivity → compact status line; any key restores full controls |
+| 12) Multi-provider media layer | `media/providers/` registry; YouTube (Tier 1), HiAnime/WCO (Tier 2), KissCartoon (Tier 3 browser) |
+| 13) Continue Watching (Phases 1–5) | `youtube/progress.py` + `media_history.py`; lane at startup; periodic checkpoints; K key; finalization on exit |
+| 14) Continue Watching (Phase 6) | B<N> bookmark picker; U<N> up-next for HiAnime; A=recent activity screen; bookmark-aware resume prompt; `crt_tools.py media progress/history` |
 
 ---
 

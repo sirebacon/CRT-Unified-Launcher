@@ -17,6 +17,7 @@ All diagnostic and settings tools for CRT-Unified-Launcher.
 | [config.md](config.md) | `tools/config.py` | dump, check, wrapper validation |
 | [calibration.md](calibration.md) | `tools/calibration.py` | adjust, set-crt, set-idle, offsets, overlap |
 | [prereqs.md](prereqs.md) | `tools/prereqs.py` | prereqs check |
+| [media.md](media.md) | `tools/media.py` | progress, history |
 | [gaming-session.md](gaming-session.md) | *(existing scripts)* | validate, debug runs |
 
 ---
@@ -24,11 +25,11 @@ All diagnostic and settings tools for CRT-Unified-Launcher.
 ## Module Architecture
 
 > **Implementation status:**
-> - **Done (Phases 1 & 2):** `crt_tools.py`, `tools/cli.py`, `display dump`, `config dump/check`,
->   `prereqs`, `window list/watch/move`, `audio status/set/restore`, `session log/processes/flag`,
->   `calibrate adjust/set-crt/set-idle/overlap`
-> - **Planned (Phases 4 & 5):** `display restore`, `window restore`, `display modes/vdd/token`,
->   `session state`, `config check --wrapper`, `calibrate set-crt-offsets`
+> - **Done:** `crt_tools.py`, `tools/cli.py`, `display dump/modes/vdd/token/restore`,
+>   `config dump/check/check-wrapper`, `prereqs`, `window list/watch/move/restore`,
+>   `audio status/set/restore`, `session state/log/flag/processes`,
+>   `calibrate adjust/set-crt/set-idle/set-crt-offsets/overlap`,
+>   `media progress/history`
 
 ### Entry point
 
@@ -54,6 +55,7 @@ tools/
   config.py        config dump, check
   calibration.py   calibrate adjust, set-crt, set-idle, set-crt-offsets, overlap
   prereqs.py       prereqs check
+  media.py         media progress, history diagnostics
 ```
 
 The existing `tools/` directory holds legacy scripts (`inspectRetro.py`, `plex_callibrate.py`, etc.). These stay untouched alongside the new package.
@@ -159,4 +161,6 @@ All commands: `python crt_tools.py <category> <subcommand>`
 | `calibrate set-crt-offsets` | `tools/calibration.py` | High | Both |
 | `calibrate overlap --window "..." --display crt` | `tools/calibration.py` | Medium | Both |
 | `prereqs` | `tools/prereqs.py` | High | Both |
+| `media progress` | `tools/media.py` | Medium | Both |
+| `media history` | `tools/media.py` | Medium | Both |
 

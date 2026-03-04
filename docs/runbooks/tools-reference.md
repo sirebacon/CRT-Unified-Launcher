@@ -14,4 +14,5 @@
 > | [docs/tools/config.md](../tools/config.md) | dump, check, wrapper validation |
 > | [docs/tools/calibration.md](../tools/calibration.md) | adjust, set-crt, set-idle, offsets, overlap |
 > | [docs/tools/prereqs.md](../tools/prereqs.md) | prereqs check |
+> | [docs/tools/media.md](../tools/media.md) | progress, history |
 > | [docs/tools/gaming-session.md](../tools/gaming-session.md) | validate, debug runs |
