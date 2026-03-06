@@ -33,16 +33,17 @@ class YouTubeProvider(Provider):
 
     def can_handle(self, url: str) -> bool:
         try:
-            return urlparse(url).netloc in _VALID_HOSTS
+            return urlparse(url).netloc.lower() in _VALID_HOSTS
         except Exception:
             return False
 
     def validate(self, url: str) -> Optional[str]:
         try:
             parsed = urlparse(url)
+            host = parsed.netloc.lower()
             if parsed.scheme not in ("http", "https"):
                 return "URL must start with http:// or https://"
-            if parsed.netloc not in _VALID_HOSTS:
+            if host not in _VALID_HOSTS:
                 return f"Not a YouTube URL (host: {parsed.netloc!r})"
             return None
         except Exception as e:
@@ -91,12 +92,13 @@ class YouTubeProvider(Provider):
     def get_continue_metadata(self, url: str) -> dict:
         try:
             parsed = urlparse(url)
+            host = parsed.netloc.lower()
             qs = parse_qs(parsed.query)
-            if parsed.netloc in _VALID_HOSTS:
+            if host in _VALID_HOSTS:
                 video_ids = qs.get("v", [])
                 if video_ids:
                     video_id = video_ids[0]
-                elif parsed.netloc == "youtu.be":
+                elif host == "youtu.be":
                     video_id = parsed.path.lstrip("/").split("/")[0]
                 else:
                     return {}

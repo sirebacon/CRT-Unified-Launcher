@@ -107,9 +107,10 @@ def validate_youtube_url(url: str) -> Optional[str]:
     """Return None if valid, else an error message string."""
     try:
         parsed = urlparse(url)
+        host = parsed.netloc.lower()
         if parsed.scheme not in ("http", "https"):
             return "URL must start with http:// or https://"
-        if parsed.netloc not in _VALID_HOSTS:
+        if host not in _VALID_HOSTS:
             return f"Not a YouTube URL (host: {parsed.netloc!r})"
         return None
     except Exception as e:
