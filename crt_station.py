@@ -15,6 +15,7 @@ RETROARCH_SESSION_PROFILE = os.path.join("profiles", "retroarch-session.json")
 GAMING_MANIFEST = os.path.join("profiles", "gaming-manifest.json")
 RE_STACK_LAUNCHER = "launch_resident_evil_stack.py"
 CRT_TOOLS_LAUNCHER = "crt_tools.py"
+LIVE_TV_LAUNCHER = "launch_live_tv.py"
 LAUNCHBOX_EMULATORS_XML = r"D:\Emulators\LaunchBox\Data\Emulators.xml"
 
 
@@ -128,6 +129,17 @@ def run_plex_mode() -> None:
 def run_youtube_mode() -> None:
     try:
         subprocess.run([sys.executable, "launch_youtube.py"])
+    except KeyboardInterrupt:
+        pass
+
+
+def run_live_tv_mode() -> None:
+    if not os.path.exists(LIVE_TV_LAUNCHER):
+        print(f"Live TV launcher not found: {LIVE_TV_LAUNCHER}")
+        input("Press Enter to return to menu...")
+        return
+    try:
+        subprocess.run([sys.executable, LIVE_TV_LAUNCHER])
     except KeyboardInterrupt:
         pass
 
@@ -303,17 +315,18 @@ def main():
         print(" 2. [GAMING] Launch LaunchBox (Session)")
         print(" 3. [CINEMA] Launch Plex")
         print(" 4. [CINEMA] Launch Media (YouTube / HiAnime / URL)")
-        print(" 5. [GAMING] Launch Resident Evil (Manual Mode)")
-        print(" 6. [TOOLS]  CRT Tools")
-        print(" 7. [TOOLS]  Restore Default Settings")
-        print(" 8. [TOOLS]  Recover Resident Evil Stack")
-        print(" 9. [EXIT]   Close Menu")
+        print(" 5. [CINEMA] Launch Live TV (VLC)")
+        print(" 6. [GAMING] Launch Resident Evil (Manual Mode)")
+        print(" 7. [TOOLS]  CRT Tools")
+        print(" 8. [TOOLS]  Restore Default Settings")
+        print(" 9. [TOOLS]  Recover Resident Evil Stack")
+        print("10. [EXIT]   Close Menu")
         print("    Quick keys: [q] Quit")
         print("========================================")
 
         try:
-            choice = input("\nSelect an option (1-9): ").strip()
-            if _is_quit(choice) or choice == '9':
+            choice = input("\nSelect an option (1-10): ").strip()
+            if _is_quit(choice) or choice == '10':
                 break
             if choice == '1':
                 run_retroarch_mode()
@@ -325,10 +338,12 @@ def main():
             elif choice == '4':
                 run_youtube_mode()
             elif choice == '5':
-                run_resident_evil_stack_manual()
+                run_live_tv_mode()
             elif choice == '6':
-                crt_tools_menu()
+                run_resident_evil_stack_manual()
             elif choice == '7':
+                crt_tools_menu()
+            elif choice == '8':
                 ok, msg, restored = restore_defaults_from_backup()
                 print(msg)
                 if restored:
@@ -346,7 +361,7 @@ def main():
                         check=False,
                     )
                 input("\nPress Enter to return to menu...")
-            elif choice == '8':
+            elif choice == '9':
                 restore_resident_evil_stack()
         except KeyboardInterrupt:
             print("\nInterrupted. Returning to menu...")

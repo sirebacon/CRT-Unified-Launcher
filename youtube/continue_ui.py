@@ -145,7 +145,8 @@ def run_continue_lane(max_items: int = 20) -> tuple[Optional[str], Optional[floa
               f"B<N> bookmark  U<N> up-next  H history  A activity  Enter URL prompt")
         print("Pick: ", end="", flush=True)
         try:
-            pick = input().strip().lower()
+            raw_pick = input().strip()
+            pick = raw_pick.lower()
         except (EOFError, KeyboardInterrupt):
             raise SystemExit(0)
 
@@ -241,7 +242,7 @@ def run_continue_lane(max_items: int = 20) -> tuple[Optional[str], Optional[floa
                 return sel_url, sel_pos, False
         elif pick.startswith(("http://", "https://")):
             # Allow direct URL entry from the Continue lane to avoid a second prompt.
-            return pick, None, False
+            return raw_pick, None, False
         # out-of-range digit or unrecognized â†’ _dirty stays False â†’ URL prompt
 
     return None, None, False

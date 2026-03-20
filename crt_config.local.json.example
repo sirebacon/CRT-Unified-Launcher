@@ -8,5 +8,8 @@
   ],
 
   "youtube_cookies_from_browser": "firefox",
-  "youtube_cookies_file": ""
+  "youtube_cookies_file": "",
+  "live_tv_playlist_url": "",
+  "live_tv_vlc_path": "",
+  "live_tv_disable_vlc_autoresize": true
 }

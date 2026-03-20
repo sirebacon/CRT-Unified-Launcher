@@ -19,7 +19,8 @@
       "Bash(node:*)",
       "Bash(py:*)",
       "Bash(yt-dlp:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(\"C:\\\\Users\\\\maver\\\\AppData\\\\Roaming\\\\Python\\\\Python314\\\\Scripts\\\\yt-dlp.exe\":*)"
     ]
   }
 }
